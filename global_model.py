@@ -234,20 +234,65 @@ class GlobalModel:
         print("Integration finished.")
         print(self.results.message)
 
-    def plot_results(self):
+    def plot_results(self, output_filename=None):
+        """
+        Generates and displays or saves plots of the simulation results.
+
+        Args:
+            output_filename (str, optional): If provided, the plot will be saved
+                to this file path. The format is determined by the extension
+                (e.g., 'results.png', 'results.pdf'). If None, the plot is
+                displayed on screen. Defaults to None.
+        """
         if self.results is None or not self.results.success:
             print("No valid results to plot. Simulation may have failed.")
             return
+
         t, y = self.results.t, self.results.y
-        plt.figure(figsize=(12, 8))
-        plt.subplot(2, 1, 1)
-        for i, species in enumerate(self.species): plt.plot(t, y[i, :], label=species)
-        plt.yscale('log'); plt.title('Species Densities'); plt.xlabel('Time (s)'); plt.ylabel('Density (m^-3)')
-        plt.ylim(bottom=1e8); plt.legend(); plt.grid(True, which="both", ls="--")
-        ne = y[self.species.index('e'), :]
+        
+        # --- Create the Figure and Axes ---
+        # Using plt.subplots() gives more control over the figure aesthetics
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 9))
+        fig.suptitle('Global Model Simulation Results', fontsize=16)
+
+        # --- Plot 1: Species Densities ---
+        for i, species in enumerate(self.species):
+            ax1.plot(t, y[i, :], label=species)
+        
+        ax1.set_yscale('log')
+        ax1.set_title('Species Densities')
+        ax1.set_xlabel('Time (s)')
+        ax1.set_ylabel('Density (m⁻³)')
+        ax1.set_ylim(bottom=1e8)
+        ax1.legend()
+        ax1.grid(True, which="both", ls="--")
+
+        # --- Plot 2: Electron Temperature ---
+        ne_idx = self.species.index('e')
+        # Add a small epsilon to prevent division by zero if ne is ever zero
+        ne = y[ne_idx, :] + 1e-10
         electron_energy_density = y[-1, :]
+        
         Te_eV = (2.0 / 3.0) * electron_energy_density / ne
         Te_K = Te_eV * self.const['q_e'] / self.const['kb']
-        plt.subplot(2, 1, 2)
-        plt.plot(t, Te_K); plt.title('Electron Temperature'); plt.xlabel('Time (s)'); plt.ylabel('Temperature (K)')
-        plt.grid(True); plt.tight_layout(); plt.show()
+        
+        ax2.plot(t, Te_K)
+        ax2.set_title('Electron Temperature')
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Temperature (K)')
+        ax2.grid(True)
+        # Set y-axis to start from zero for better visualization
+        ax2.set_ylim(bottom=0)
+
+        # --- Finalize Layout ---
+        fig.tight_layout(rect=[0, 0, 1, 0.96]) # Adjust for suptitle
+
+        # --- Display or Save the Figure ---
+        if output_filename:
+            try:
+                fig.savefig(output_filename, dpi=150)
+                print(f"Plot successfully saved to '{output_filename}'")
+            except Exception as e:
+                print(f"!!! ERROR: Failed to save plot. {e} !!!")
+        else:
+            plt.show()
