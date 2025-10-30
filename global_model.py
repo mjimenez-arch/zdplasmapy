@@ -234,65 +234,45 @@ class GlobalModel:
         print("Integration finished.")
         print(self.results.message)
 
-    def plot_results(self, output_filename=None):
+    def plot_results(self, output_filename=None, return_figure=False):
         """
-        Generates and displays or saves plots of the simulation results.
+        Generates and displays, saves, or returns plots of the simulation results.
 
         Args:
-            output_filename (str, optional): If provided, the plot will be saved
-                to this file path. The format is determined by the extension
-                (e.g., 'results.png', 'results.pdf'). If None, the plot is
-                displayed on screen. Defaults to None.
+            output_filename (str, optional): Saves the plot to this file path.
+            return_figure (bool, optional): If True, returns the matplotlib figure
+                object instead of showing or saving it. Useful for embedding in GUIs.
         """
         if self.results is None or not self.results.success:
             print("No valid results to plot. Simulation may have failed.")
+            if return_figure: return None
             return
 
         t, y = self.results.t, self.results.y
-        
-        # --- Create the Figure and Axes ---
-        # Using plt.subplots() gives more control over the figure aesthetics
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 9))
-        fig.suptitle('Global Model Simulation Results', fontsize=16)
+        fig.suptitle(f'Global Model Results: {self.mdef.get("name", "Untitled Model")}', fontsize=16)
 
-        # --- Plot 1: Species Densities ---
-        for i, species in enumerate(self.species):
-            ax1.plot(t, y[i, :], label=species)
-        
-        ax1.set_yscale('log')
-        ax1.set_title('Species Densities')
-        ax1.set_xlabel('Time (s)')
-        ax1.set_ylabel('Density (m⁻³)')
-        ax1.set_ylim(bottom=1e8)
-        ax1.legend()
+        for i, species in enumerate(self.species): ax1.plot(t, y[i, :], label=species)
+        ax1.set_yscale('log'); ax1.set_title('Species Densities'); ax1.set_xlabel('Time (s)')
+        ax1.set_ylabel('Density (m⁻³)'); ax1.set_ylim(bottom=1e8); ax1.legend()
         ax1.grid(True, which="both", ls="--")
 
-        # --- Plot 2: Electron Temperature ---
-        ne_idx = self.species.index('e')
-        # Add a small epsilon to prevent division by zero if ne is ever zero
-        ne = y[ne_idx, :] + 1e-10
+        ne = y[self.species.index('e'), :] + 1e-10
         electron_energy_density = y[-1, :]
-        
-        Te_eV = (2.0 / 3.0) * electron_energy_density / ne
-        Te_K = Te_eV * self.const['q_e'] / self.const['kb']
+        Te_eV = (2.0/3.0) * electron_energy_density/ne
+        Te_K = Te_eV * self.const['q_e']/self.const['kb']
         
         ax2.plot(t, Te_K)
-        ax2.set_title('Electron Temperature')
-        ax2.set_xlabel('Time (s)')
-        ax2.set_ylabel('Temperature (K)')
-        ax2.grid(True)
-        # Set y-axis to start from zero for better visualization
-        ax2.set_ylim(bottom=0)
+        ax2.set_title('Electron Temperature'); ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Temperature (K)'); ax2.grid(True); ax2.set_ylim(bottom=0)
 
-        # --- Finalize Layout ---
-        fig.tight_layout(rect=[0, 0, 1, 0.96]) # Adjust for suptitle
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
 
-        # --- Display or Save the Figure ---
-        if output_filename:
-            try:
-                fig.savefig(output_filename, dpi=150)
-                print(f"Plot successfully saved to '{output_filename}'")
-            except Exception as e:
-                print(f"!!! ERROR: Failed to save plot. {e} !!!")
+        # --- NEW LOGIC ---
+        if return_figure:
+            return fig # Return the figure object for Streamlit to use
+        elif output_filename:
+            fig.savefig(output_filename, dpi=150)
+            print(f"Plot successfully saved to '{output_filename}'")
         else:
-            plt.show()
+            plt.show() # Default behavior is to show on screen
