@@ -1,12 +1,12 @@
-# Python Global Plasma Model (GPMPy)
+# Zero Dimensional Plasma Python (ZDPlasmaPy)
 
 A flexible 0D global model for simulating low-temperature plasma chemistry, refactored from a legacy MATLAB code for improved robustness, flexibility, and testability.
 
 This repository contains a Python-based engine for 0D (global) modeling of low-temperature plasmas. The engine solves a system of coupled ordinary differential equations for particle and power balance to determine the evolution of species densities and the electron temperature. The project demonstrates a complete refactoring of an older scientific code into a modern, modular, and maintainable software architecture.
-
+<!--
 ![Example Oxygen Model Results](path/to/your/successful_oxygen_plot.png)
-*(To add an image: take a screenshot of your successful Oxygen plot, save it in this folder, and replace the path above with the filename.)*
-
+*(To add an image: take a screenshot of your successful Oxygen plot, save it in this folder, and replace the 
+--->
 ## Features
 
 - **Flexible Engine:** The core `global_model.py` is a generic ODE solver engine, completely separate from the plasma physics.
