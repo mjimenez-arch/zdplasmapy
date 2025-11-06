@@ -34,14 +34,14 @@ First, clone the repository and set up the Conda environment.
 
 ```bash
 # Clone the repository
-git clone https://github.com/YourUsername/python-plasma-global-model.git
-cd python-plasma-global-model
+git clone https://github.com/mjimenez-arch/zdplasmapy.git
+cd zdplasmapy
 
 # Create a new Conda environment with all required packages
-conda create -n plasma_env python=3.9 numpy scipy matplotlib
+conda create -n venv python=3.9 numpy scipy matplotlib
 
 # Activate the environment
-conda activate plasma_env
+conda activate venv
 ```
 
 ### 3. How to Run a Simulation
@@ -71,6 +71,26 @@ python main.py
 The script will run the simulation and display plots of the species densities and electron temperature over time.
 
 ---
+
+### 3. How to Run a app.py within codespace environment
+
+# Create a new Conda environment with all required packages
+```bash
+conda create -n venv python=3.9 numpy scipy matplotlib
+```
+# Activate the environment
+```bash
+conda activate venv
+```
+
+# if in future instances of code space you have to install again libraries run
+```bash
+pip install -r requirements.txt
+```
+# run the web app for an easy exploration of models (TODO)
+```bash
+streamlit run app.py
+```
 
 ## Project Structure
 
