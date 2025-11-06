@@ -72,22 +72,23 @@ The script will run the simulation and display plots of the species densities an
 
 ---
 
-### 3. How to Run a app.py within codespace environment
+### 4. How to Run a app.py within codespace environment
 
-# Create a new Conda environment with all required packages
+**Create a new Conda environment with all required packages**
 ```bash
 conda create -n venv python=3.9 numpy scipy matplotlib
 ```
-# Activate the environment
+
+**Activate the environment**
 ```bash
 conda activate venv
 ```
 
-# if in future instances of code space you have to install again libraries run
+**renstall libraries if required**
 ```bash
 pip install -r requirements.txt
 ```
-# run the web app for an easy exploration of models (TODO)
+**run the web app**
 ```bash
 streamlit run app.py
 ```
