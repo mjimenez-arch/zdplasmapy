@@ -13,7 +13,8 @@ def main():
     # The path is now relative to the 'input_models' sub-folder.
     # Uncomment the model you want to run:
     
-    input_filename = 'input_models/oxygen.py'
+    input_filename = 'input_models/oxygen_flow.py'
+    # input_filename = 'input_models/oxygen.py'
     # input_filename = 'input_models/argon.py'
     
     # --- AUTOMATICALLY GENERATE OUTPUT FILENAME ---

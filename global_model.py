@@ -162,7 +162,40 @@ class GlobalModel:
         else:
             power_W = self.mdef.get('constant_data', {}).get('power_input_W', 0.0)
         Q_abs = power_W / self.const['q_e'] / params['volume']
-        
+
+        # --- NEW: ADD FLOW AND PUMPING PHYSICS ---
+        if 'flow_parameters' in self.mdef:
+            # 1. Calculate residence time and pumping frequency
+            flow_sccm = self.mdef['flow_parameters']['flow_rate_sccm']
+            pressure_Pa = self.mdef['initial_values']['p'] # Assumes constant pressure
+            volume_m3 = self.mdef['geometry']['volume']
+            gas_temp_K = self.mdef['constant_data']['Th_K']
+
+            # Convert sccm to m^3/s at standard temp (273.15 K)
+            flow_m3_per_s_std = flow_sccm / 6e7
+            # Convert to flow rate at operating pressure (Q = pV/t)
+            Q = flow_m3_per_s_std * (101325 / pressure_Pa)
+            
+            # Residence time and pumping frequency
+            tau_res = volume_m3 / Q
+            k_pump = 1.0 / tau_res if tau_res > 0 else 0
+
+            # 2. Apply pumping loss to all neutral species
+            # (Assuming ions are lost to walls, not pumping)
+            for i, species_name in enumerate(self.species):
+                # A simple check to see if the species is neutral
+                if '+' not in species_name and '-' not in species_name and species_name != 'e':
+                    dY_dt[i] -= k_pump * densities[i]
+            
+            # 3. Add inflow source for the feedstock gas
+            feedstock_gas_name = self.mdef['flow_parameters']['feedstock_gas']
+            feedstock_idx = self.species.index(feedstock_gas_name)
+            
+            # The inflow must balance the total outflow to maintain pressure
+            total_neutral_density = sum(densities[i] for i, s in enumerate(self.species) if '+' not in s and '-' not in s and s != 'e')
+            inflow_source = total_neutral_density * k_pump
+            dY_dt[feedstock_idx] += inflow_source
+            
         Q_loss = 0.0
         if self.debug and self.debug_step_counter < 5:
             print("\n  Power Loss Calculation (Q_loss):")
