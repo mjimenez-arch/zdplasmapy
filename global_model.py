@@ -118,23 +118,24 @@ class GlobalModel:
             print(f"!!! ERROR: Could not write stoichiometry report file. {e} !!!")
 
     def _ode_system(self, t, y):
-        # ... (The rest of this method remains unchanged and correct)
+        # --- Enforce Physical Boundaries ---
         densities = np.maximum(y[:-1], 1e-10)
         electron_energy_density = max(y[-1], 1e-10)
         ne_density = densities[self.species.index('e')]
         Te_eV = (2.0 / 3.0) * electron_energy_density / ne_density
 
+        # ... (Debug printing code remains the same) ...
         if self.debug and self.debug_step_counter < 5:
             print(f"\n--- Solver Step {self.debug_step_counter}, Time t = {t:.3e} ---")
             for i, species in enumerate(self.species): print(f"  y[{i}] ({self.species[i]:<5}): {y[i]: 0.3e}")
             print(f"  y[{self.num_species}] (Energy): {y[-1]: 0.3e}")
             print(f"  Calculated Te_eV = {Te_eV:.3e}")
 
+        # --- Build Parameter Dictionary ---
         Y_vec = [0] + list(densities)
         params = {
             'Te_eV': Te_eV, 'densities': densities, 'Y': Y_vec, 't': t,
-            'na': np.sum(densities),
-            'constants': self.const
+            'na': np.sum(densities), 'constants': self.const
         }
         params.update(self.mdef['geometry'])
         params.update(self.mdef['constant_data'])
@@ -144,6 +145,7 @@ class GlobalModel:
             params.update(declared_params)
         except (ValueError, ZeroDivisionError) as e: return np.full_like(y, np.nan)
 
+        # --- Chemical Rate Calculation ---
         num_reactions = len(self.mdef['reactions'])
         reaction_rates = np.zeros(num_reactions)
         for i, reaction in enumerate(self.mdef['reactions']):
@@ -154,48 +156,64 @@ class GlobalModel:
                 if reactants[j] > 0: rate *= densities[j] ** reactants[j]
             reaction_rates[i] = rate
 
+        # --- Particle Balance Equations (Chemical Part) ---
         dY_dt = np.zeros(self.num_species)
         for i in range(self.num_species): dY_dt[i] = np.sum(reaction_rates * self.stoich_matrix_net[:, i])
 
+        # --- PLASIMO-style Pressure-Controlled Mass Flow Physics ---
+        if 'flow_parameters' in self.mdef:
+            fp = self.mdef['flow_parameters']
+            
+            rho = 0.0
+            p_current = 0.0
+            e_idx = self.species.index('e')
+
+            # --- THE CORRECTED LOOP ---
+            for i, s_name in enumerate(self.species):
+                # Check if the species is an electron
+                if i == e_idx:
+                    mass_i = self.const['m_e']
+                    p_current += densities[i] * self.const['kb'] * (Te_eV * self.const['q_e'] / self.const['kb'])
+                else: # It's a heavy particle
+                    # Build the key for the constant_data dictionary
+                    mass_key = f'mass_{s_name.replace("+","").replace("-","")}'
+                    if mass_key not in self.mdef['constant_data']:
+                        raise KeyError(f"Mass for species '{s_name}' not found in constant_data. Please define '{mass_key}'.")
+                    mass_i = self.mdef['constant_data'][mass_key]
+                    p_current += densities[i] * self.const['kb'] * self.mdef['constant_data']['Th_K']
+                
+                rho += densities[i] * mass_i
+            # --- END OF CORRECTION ---
+
+            p_target = fp['target_pressure_Pa']
+            p_ratio = p_current / p_target if p_target > 0 else 1.0
+            Q_in_tot_kg_per_s = fp['total_mass_flow_kg_s']
+            
+            if rho > 0:
+                vA_div_V = (Q_in_tot_kg_per_s / rho) * p_ratio / self.mdef['geometry']['volume']
+            else:
+                vA_div_V = 0
+
+            # Apply pumping loss to ALL species (including ions and electrons)
+            for i in range(self.num_species):
+                dY_dt[i] -= densities[i] * vA_div_V
+            
+            # Add inflow source for the feedstock gases
+            for i in range(len(fp['inflow_species_indices'])):
+                idx = fp['inflow_species_indices'][i]
+                mass_key = f'mass_{self.species[idx]}'
+                mass_i = self.mdef['constant_data'][mass_key]
+                inflow_rate = fp['inflow_mass_kg_s'][i] / mass_i / self.mdef['geometry']['volume']
+                dY_dt[idx] += inflow_rate
+        
+        # --- Power Balance Equation ---
+        # ... (The rest of the function remains unchanged and correct)
         if 'power_input_func' in self.mdef:
             power_W = self.mdef['power_input_func'](t, params['volume'])
         else:
             power_W = self.mdef.get('constant_data', {}).get('power_input_W', 0.0)
         Q_abs = power_W / self.const['q_e'] / params['volume']
-
-        # --- NEW: ADD FLOW AND PUMPING PHYSICS ---
-        if 'flow_parameters' in self.mdef:
-            # 1. Calculate residence time and pumping frequency
-            flow_sccm = self.mdef['flow_parameters']['flow_rate_sccm']
-            pressure_Pa = self.mdef['initial_values']['p'] # Assumes constant pressure
-            volume_m3 = self.mdef['geometry']['volume']
-            gas_temp_K = self.mdef['constant_data']['Th_K']
-
-            # Convert sccm to m^3/s at standard temp (273.15 K)
-            flow_m3_per_s_std = flow_sccm / 6e7
-            # Convert to flow rate at operating pressure (Q = pV/t)
-            Q = flow_m3_per_s_std * (101325 / pressure_Pa)
-            
-            # Residence time and pumping frequency
-            tau_res = volume_m3 / Q
-            k_pump = 1.0 / tau_res if tau_res > 0 else 0
-
-            # 2. Apply pumping loss to all neutral species
-            # (Assuming ions are lost to walls, not pumping)
-            for i, species_name in enumerate(self.species):
-                # A simple check to see if the species is neutral
-                if '+' not in species_name and '-' not in species_name and species_name != 'e':
-                    dY_dt[i] -= k_pump * densities[i]
-            
-            # 3. Add inflow source for the feedstock gas
-            feedstock_gas_name = self.mdef['flow_parameters']['feedstock_gas']
-            feedstock_idx = self.species.index(feedstock_gas_name)
-            
-            # The inflow must balance the total outflow to maintain pressure
-            total_neutral_density = sum(densities[i] for i, s in enumerate(self.species) if '+' not in s and '-' not in s and s != 'e')
-            inflow_source = total_neutral_density * k_pump
-            dY_dt[feedstock_idx] += inflow_source
-            
+        
         Q_loss = 0.0
         if self.debug and self.debug_step_counter < 5:
             print("\n  Power Loss Calculation (Q_loss):")
@@ -223,7 +241,7 @@ class GlobalModel:
         if not np.all(np.isfinite(derivatives)):
             print("\nCRITICAL ERROR: A calculated derivative is NaN or Inf!")
         return derivatives
-
+    
     # ... (The get_initial_conditions, run, and plot_results methods remain unchanged) ...
     def get_initial_conditions(self):
         iv = self.mdef['initial_values']

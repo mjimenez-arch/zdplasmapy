@@ -37,9 +37,14 @@ def get_model_definition():
     constant_data['mass_O'] = 16 * 1.67e-27
     
     # --- NEW: FLOW PARAMETERS ENABLED ---
+    flow_rate_o2_kgs = 100 * 2.13e-8 
     flow_parameters = {
-        'flow_rate_sccm': 100,      # A typical flow rate
-        'feedstock_gas': 'O2',     # The gas being flowed into the reactor
+        'target_pressure_Pa': 5.5,
+        'total_mass_flow_kg_s': flow_rate_o2_kgs,
+        # A list of the species being flowed in
+        'inflow_species_indices': [species.index('O2')],
+        # A list of their corresponding mass flow rates in kg/s
+        'inflow_mass_kg_s': [flow_rate_o2_kgs],
     }
 
     def calculate_declarations(p):
