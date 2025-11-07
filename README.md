@@ -1,5 +1,7 @@
 # Zero Dimensional Plasma Python (ZDPlasmaPy)
 
+[![Python CI](https://github.com/mjimenez-arch/zdplasmapy/actions/workflows/python-ci.yml/badge.svg)](https://github.com/mjimenez-arch/zdplasmapy/actions/workflows/python-ci.yml)
+
 A flexible 0D global model for simulating low-temperature plasma chemistry, refactored from a legacy MATLAB code for improved robustness, flexibility, and testability.
 
 This repository contains a Python-based engine for 0D (global) modeling of low-temperature plasmas. The engine solves a system of coupled ordinary differential equations for particle and power balance to determine the evolution of species densities and the electron temperature. The project demonstrates a complete refactoring of an older scientific code into a modern, modular, and maintainable software architecture.
