@@ -1,0 +1,27 @@
+# Metadata for the validation data from Chung et al. 1999
+
+paper:
+  citation: "T. H. Chung et al., J. Appl. Phys. 86, 3536 (1999)"
+  doi: "10.1063/1.371255"
+
+# A list of all available experimental datasets from this paper
+datasets:
+  - id: "fig5_Te_vs_P"
+    description: "Electron Temperature vs. Pressure from Figure 5"
+    file: "figure5_Te_vs_P.csv"
+    conditions:
+      power_W: 58.0
+      geometry: { L_m: 0.48, R_m: 0.15 }
+      # The x-axis of the data
+      independent_variable: { name: "pressure_Pa", units: "Pa" } 
+      # The y-axis of the data
+      dependent_variable: { name: "Te_eV", units: "eV" }
+
+  - id: "fig6_ne_vs_P"
+    description: "Electron Density vs. Pressure from Figure 6"
+    file: "figure6_ne_vs_P.csv"
+    conditions:
+      power_W: 58.0 # Same power as Figure 5
+      geometry: { L_m: 0.48, R_m: 0.15 }
+      independent_variable: { name: "pressure_Pa", units: "Pa" }
+      dependent_variable: { name: "ne_m3", units: "m-3" }

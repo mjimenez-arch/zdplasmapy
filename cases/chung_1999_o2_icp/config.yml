@@ -1,0 +1,42 @@
+# cases/chung_1999_o2_icp/config.yml
+
+name: "Chung 1999 Oxygen ICP Model"
+description: "A 0D global model implementation based on the paper by Chung et al., J. Appl. Phys. 86, 3536 (1999)."
+
+# --- Reference to the chemistry definition ---
+chemistry:
+  file: "./chemistry.yml"
+
+# --- Model Parameters ---
+# These are the main control knobs for the simulation run.
+parameters:
+  pressure_Pa: 5.5
+  power_W: 58
+  gas_temp_K: 600
+  time_end_s: 1.0
+
+# --- Physical Setup ---
+geometry:
+  type: cylinder
+  length_m: 0.48
+  radius_m: 0.15
+
+# --- Physics Model Selection ---
+# This explicitly selects which transport model to use from the library.
+transport_model: "chung_1999"
+
+# --- Initial Conditions ---
+# Defines the low-density "seed" plasma to start the simulation.
+initial_conditions:
+  Te_eV: 2.5
+  species_densities:
+    O2+: 1.0e12
+    O: 1.0e13
+    O+: 1.0e12
+    O-: 1.0e11
+    e: 1.0e12
+
+# --- Validation Data ---
+# (As an example for the future)
+#validation:
+#  manifest_file: "./validation/metadata.yml"

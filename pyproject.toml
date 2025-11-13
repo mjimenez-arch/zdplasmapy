@@ -1,0 +1,11 @@
+[project]
+name = "zdplasmapy"
+version = "0.1.0"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+# Add this to the end of your pyproject.toml
+
+[tool.setuptools.packages.find]
+where = ["src"]
