@@ -1,0 +1,13 @@
+Th_K:
+  - gas_temp_K
+  - Th_vib
+  - T_gas
+  - Tg_K
+  - Tg
+power_input_W:
+  - power_W
+  - P_in
+R:
+  - radius_m
+L:
+  - length_m

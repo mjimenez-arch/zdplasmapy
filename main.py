@@ -1,45 +1,41 @@
-# main.py (New "Smart Naming" Version)
+# main.py — cleaned version
 
 import os
-from model_parser import load_input_file
-from global_model import GlobalModel
+import sys
+from src.config_parser import load_config
+from src.chemistry_parser import load_chemistry
+from src.global_model import GlobalModel
+from src.transport_models import DECLARATIONS_FUNCS
+from src.util import load_key_aliases, map_keys, compute_geometry, build_model_definition
+from pathlib import Path
 
-def main():
+
+def main(config_path):
     """
-    Main function to run the global plasma model.
-    This version automatically generates the output plot filename based on the input file.
+    Main entry point for running the global plasma model using a YAML config.
     """
-    # --- CHOOSE YOUR MODEL ---
-    # The path is now relative to the 'input_models' sub-folder.
-    # Uncomment the model you want to run:
-    
-    input_filename = 'input_models/oxygen_flow.py'
-    # input_filename = 'input_models/oxygen.py'
-    # input_filename = 'input_models/argon.py'
-    
-    # --- AUTOMATICALLY GENERATE OUTPUT FILENAME ---
-    # This extracts the base name of the file without the extension (e.g., "oxygen")
-    model_name = os.path.splitext(os.path.basename(input_filename))[0]
-    output_plot_filename = f"{model_name}_results.svg"
-    
     try:
-        print(f"Loading model definition from: {input_filename}")
-        model_definition = load_input_file(input_filename)
-    except FileNotFoundError:
-        print(f"Error: Input file '{input_filename}' not found.")
-        return
+        model_definition = build_model_definition(config_path)
     except Exception as e:
-        print(f"An error occurred while loading the model definition: {e}")
+        print(f"Error building model definition: {e}")
         return
 
-    # Create and run the model
-    # The 'debug' flag can be toggled to show/hide detailed console output
-    model = GlobalModel(model_definition, debug=False)
+    model = GlobalModel(model_definition, debug=True)
     model.run()
+    # Extract case name from config path
+    case_name = Path(config_path).parent.name
+    output_filename = f"{case_name}_results.png"
+    model.plot_results(case_name, output_filename)
 
-    # --- SAVE THE PLOT TO THE AUTOMATICALLY GENERATED FILENAME ---
-    print(f"\nGenerating output plot...")
-    model.plot_results(output_filename=output_plot_filename)
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    # Allow passing YAML file as command-line arg
+    config_path = sys.argv[1] if len(sys.argv) > 1 else "cases/ashida1995/config.yml"
+
+    if not os.path.isfile(config_path):
+        print(f"Error: Config file not found: {config_path}")
+        print("Usage: python main.py [path/to/config.yml]")
+        sys.exit(1)
+
+    print(f"Using config: {config_path}\n")
+    main(config_path)

@@ -1,0 +1,191 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "zdplasmapy Configuration Schema",
+  "description": "JSON Schema for validating zdplasmapy case config.yml files",
+  "type": "object",
+  "required": [
+    "name",
+    "chemistry",
+    "parameters",
+    "geometry",
+    "transport_model",
+    "initial_conditions"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for this case/model"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description including publication reference"
+    },
+    "chemistry": {
+      "type": "object",
+      "description": "Reference to chemistry definition file(s)",
+      "oneOf": [
+        {
+          "required": ["file"],
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "Path to single chemistry.yml file"
+            }
+          }
+        },
+        {
+          "required": ["files"],
+          "properties": {
+            "files": {
+              "type": "array",
+              "description": "List of chemistry.yml files to merge",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "description": "Main simulation parameters",
+      "required": [
+        "pressure_Pa",
+        "power_W",
+        "gas_temp_K",
+        "time_end_s"
+      ],
+      "properties": {
+        "pressure_Pa": {
+          "type": "number",
+          "description": "Gas pressure in Pascals",
+          "minimum": 0
+        },
+        "power_W": {
+          "type": "number",
+          "description": "Input power in Watts",
+          "minimum": 0
+        },
+        "gas_temp_K": {
+          "type": "number",
+          "description": "Neutral gas temperature in Kelvin",
+          "minimum": 0
+        },
+        "time_end_s": {
+          "type": "number",
+          "description": "Simulation end time in seconds",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "geometry": {
+      "type": "object",
+      "description": "Reactor geometry specification",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["cylindrical", "parallel_plate"],
+          "description": "Geometry type"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "cylindrical"
+              }
+            }
+          },
+          "then": {
+            "required": ["length_m", "radius_m"],
+            "properties": {
+              "length_m": {
+                "type": "number",
+                "description": "Cylinder length in meters",
+                "minimum": 0
+              },
+              "radius_m": {
+                "type": "number",
+                "description": "Cylinder radius in meters",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "parallel_plate"
+              }
+            }
+          },
+          "then": {
+            "required": ["area_m2", "gap_m"],
+            "properties": {
+              "area_m2": {
+                "type": "number",
+                "description": "Electrode area in square meters",
+                "minimum": 0
+              },
+              "gap_m": {
+                "type": "number",
+                "description": "Gap between electrodes in meters",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "transport_model": {
+      "type": "string",
+      "description": "Transport model selection: 'declarations', a registered class name, or 'default'"
+    },
+    "initial_conditions": {
+      "type": "object",
+      "description": "Initial plasma conditions",
+      "required": ["Te_eV", "species_densities"],
+      "properties": {
+        "Te_eV": {
+          "type": "number",
+          "description": "Initial electron temperature in eV",
+          "minimum": 0
+        },
+        "species_densities": {
+          "type": "object",
+          "description": "Initial species densities in m^-3",
+          "patternProperties": {
+            "^[A-Za-z0-9_+-]+$": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "minProperties": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "additional_parameters": {
+      "type": "object",
+      "description": "Case-specific parameters used by declarations.py",
+      "additionalProperties": true
+    },
+    "validation": {
+      "type": "object",
+      "description": "Validation data references (optional)",
+      "properties": {
+        "manifest_file": {
+          "type": "string",
+          "description": "Path to validation manifest"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

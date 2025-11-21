@@ -1,0 +1,49 @@
+# cases/ashida1995/config.yml
+
+name: "Ashida 1995 Argon Global Model"
+description: "Simple three-level argon model for cylindrical, power modulated, microwave plasma based on: Spatially averaged (global) model of time modulated high density argon plasmas, Ashida, Sumio and Lee, C. and Lieberman, M. A., Journal of Vacuum Science & Technology A, 13, 2498-2507 (1995), DOI: http://dx.doi.org/10.1116/1.579494"
+
+# --- Reference to the chemistry definition ---
+chemistry:
+  file: "./chemistry.yml"
+
+# --- Model Parameters ---
+# These are the main control knobs for the simulation run.
+parameters:
+  pressure_Pa: 133.0      # 1 Torr
+  power_W: 40.0
+  gas_temp_K: 500.0
+  time_end_s: 0.1
+
+# --- Physical Setup ---
+geometry:
+  type: cylindrical
+  length_m: 0.20          # 20 cm
+  radius_m: 0.003         # 3 mm (small diameter tube)
+
+# --- Physics Model Selection ---
+# Choose transport model implementation:
+#   - "declarations": Use custom declarations.py in this folder (default for publication cases)
+#   - A registered class name from src/transport_models.py (if available)
+#   - "default": No transport physics (chemistry only)
+transport_model: "declarations"
+
+# --- Initial Conditions ---
+# Defines the low-density "seed" plasma to start the simulation.
+initial_conditions:
+  Te_eV: 3.0
+  species_densities:
+    Ar_4s: 1.0e12
+    Ar_4p: 1.0e11
+    Ar+: 1.0e14
+    e: 1.0e14
+
+# --- Additional Parameters ---
+# Case-specific parameters used by declarations.py
+additional_parameters:
+  sigma: 1.25e-20         # m^2 (collision cross-section)
+
+# --- Validation Data ---
+# (Placeholder for future validation datasets)
+#validation:
+#  manifest_file: "./validation/metadata.yml"

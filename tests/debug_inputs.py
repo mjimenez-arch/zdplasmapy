@@ -2,7 +2,7 @@
 
 #import numpy as np
 from model_parser import load_input_file
-from global_model import GlobalModel
+from src.global_model import GlobalModel
 
 def debug_stoichiometry(input_filename):
     """

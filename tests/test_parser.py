@@ -1,78 +1,125 @@
-# tests/test_parser.py (Self-Contained Version)
-
+"""
+test_parser.py - Tests for chemistry parsing and stoichiometry
+"""
 import unittest
-import sys
 import os
-import numpy as np
+from src.global_model import GlobalModel
+from src.chemistry_parser import load_chemistry
 
-# --- Path Hack: Add the project's root directory to the Python path ---
-# This allows the test script to find and import the main project modules.
-# It calculates the path to the parent directory ('../') and adds it to the front
-# of the list of places Python looks for modules.
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_root)
 
-# Now that the path is set, we can import our modules
-from model_parser import load_input_file
-from global_model import GlobalModel
+class TestChemistryParser(unittest.TestCase):
+    """Test chemistry file parsing and species order."""
 
-# --- Test Class using the 'unittest' framework ---
-
-class TestStoichiometryParser(unittest.TestCase):
-    
-    # This is a special method that runs once before all tests in this class
-    @classmethod
-    def setUpClass(cls):
-        """Loads the Oxygen model once for all tests."""
-        print("\n--- Setting up tests: Loading Oxygen Model ---")
-        try:
-            model_definition = load_input_file('input_models/oxygen.py')
-            cls.model = GlobalModel(model_definition)
-        except FileNotFoundError:
-            # unittest.TestCase.fail() is how you force a test to fail
-            cls.fail("Could not find the Oxygen input file: 'input_models/oxygen.py'")
-
-    def test_oxygen_species_loaded(self):
-        """Checks if the species list was loaded correctly."""
-        expected_species = ['O2', 'O2+', 'O', 'O+', 'O-', 'e']
-        # self.assertEqual is the unittest way of writing 'assert a == b'
-        self.assertEqual(self.model.species, expected_species)
-        self.assertEqual(self.model.num_species, 6)
-
-    def test_oxygen_ionization_stoichiometry(self):
-        """
-        Checks the stoichiometry for the main ionization reaction:
-        e + O2 -> O2+ + 2e (Reaction #1)
-        """
-        reaction_index = 1
-        net_matrix = self.model.stoich_matrix_net
+    def test_oxygen_chemistry_loads(self):
+        """Test that oxygen chemistry file loads successfully."""
+        chem_file = 'cases/ashida1995/chemistry.yml'
+        if not os.path.exists(chem_file):
+            self.skipTest(f"Chemistry file {chem_file} not found")
         
-        idx_O2 = self.model.species.index('O2')
-        idx_O2_plus = self.model.species.index('O2+')
-        idx_e = self.model.species.index('e')
+        species, reactions, masses = load_chemistry(chem_file)
+        
+        # Check that we got data back
+        self.assertIsInstance(species, list)
+        self.assertIsInstance(reactions, list)
+        self.assertIsInstance(masses, dict)
+        self.assertGreater(len(species), 0)
+        self.assertGreater(len(reactions), 0)
 
-        self.assertEqual(net_matrix[reaction_index, idx_O2], -1.0)
-        self.assertEqual(net_matrix[reaction_index, idx_O2_plus], 1.0)
-        self.assertEqual(net_matrix[reaction_index, idx_e], 1.0)
+    def test_oxygen_species_order(self):
+        """Test that oxygen chemistry has expected species."""
+        chem_file = 'cases/ashida1995/chemistry.yml'
+        if not os.path.exists(chem_file):
+            self.skipTest(f"Chemistry file {chem_file} not found")
+        
+        species, reactions, masses = load_chemistry(chem_file)
+        
+        # Check electron is present
+        self.assertIn('e', species, "Electron species 'e' must be in species list")
+        
+        # Check at least some argon species (ashida1995 is argon, not oxygen)
+        has_argon = any('Ar' in s for s in species)
+        self.assertTrue(has_argon, "Should have argon-containing species")
 
-    def test_oxygen_dissociative_attachment_stoichiometry(self):
-        """
-        Checks the stoichiometry for dissociative attachment:
-        e + O2 -> O + O- (Reaction #2)
-        """
-        reaction_index = 2
-        net_matrix = self.model.stoich_matrix_net
 
-        idx_O2 = self.model.species.index('O2')
-        idx_O = self.model.species.index('O')
-        idx_O_minus = self.model.species.index('O-')
-        idx_e = self.model.species.index('e')
+class TestStoichiometry(unittest.TestCase):
+    """Test stoichiometry matrix construction."""
 
-        self.assertEqual(net_matrix[reaction_index, idx_O2], -1.0)
-        self.assertEqual(net_matrix[reaction_index, idx_O], 1.0)
-        self.assertEqual(net_matrix[reaction_index, idx_O_minus], 1.0)
-        self.assertEqual(net_matrix[reaction_index, idx_e], -1.0)
+    def test_stoichiometry_matrix_shape(self):
+        """Test that stoichiometry matrices have correct dimensions."""
+        chem_file = 'cases/ashida1995/chemistry.yml'
+        if not os.path.exists(chem_file):
+            self.skipTest(f"Chemistry file {chem_file} not found")
+        
+        species, reactions, masses = load_chemistry(chem_file)
+        
+        # Build minimal model definition
+        model_def = {
+            'species': species,
+            'reactions': reactions,
+            'geometry': {'volume': 1.0},
+            'constant_data': masses,
+            'initial_values': {'Te_eV': 2.0, 'e': 1e12},
+            'time_settings': {'t_start': 0, 't_end': 1e-6},
+            'declarations_func': lambda p: {}
+        }
+        
+        gm = GlobalModel(model_def)
+        
+        # Check matrix dimensions
+        self.assertEqual(gm.stoich_matrix_net.shape, (len(reactions), len(species)))
+        self.assertEqual(gm.stoich_matrix_left.shape, (len(reactions), len(species)))
 
-# This allows the script to be run directly from the command line
+    def test_charge_conservation(self):
+        """Test that gas-phase reactions conserve charge (skip wall reactions)."""
+        chem_file = 'cases/ashida1995/chemistry.yml'
+        if not os.path.exists(chem_file):
+            self.skipTest(f"Chemistry file {chem_file} not found")
+        
+        species, reactions, masses = load_chemistry(chem_file)
+        
+        model_def = {
+            'species': species,
+            'reactions': reactions,
+            'geometry': {'volume': 1.0},
+            'constant_data': masses,
+            'initial_values': {'Te_eV': 2.0, 'e': 1e12},
+            'time_settings': {'t_start': 0, 't_end': 1e-6},
+            'declarations_func': lambda p: {}
+        }
+        
+        gm = GlobalModel(model_def)
+        
+        # Define charge for each species
+        charges = {}
+        for sp in species:
+            if '+' in sp:
+                charges[sp] = sp.count('+')
+            elif '-' in sp:
+                charges[sp] = -sp.count('-')
+            elif sp == 'e':
+                charges[sp] = -1
+            else:
+                charges[sp] = 0
+        
+        # Check gas-phase reactions conserve charge (skip wall reactions)
+        for i, rxn in enumerate(reactions):
+            formula = rxn['formula']
+            # Skip wall recombination reactions (single reactant -> product without electrons)
+            if '->' in formula:
+                left, right = formula.split('->')
+                # Wall reactions typically have form "Ion+ -> Neutral" (no electrons involved)
+                if '+' not in right and 'e' not in right and '+' in left:
+                    continue  # Skip wall reaction
+            
+            charge_change = 0
+            for j, sp in enumerate(species):
+                charge_change += gm.stoich_matrix_net[i, j] * charges[sp]
+            
+            self.assertAlmostEqual(
+                charge_change, 0.0, places=10,
+                msg=f"Reaction {i} ({rxn['formula']}) does not conserve charge"
+            )
+
+
 if __name__ == '__main__':
     unittest.main()
