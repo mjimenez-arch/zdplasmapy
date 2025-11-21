@@ -137,8 +137,21 @@ class GlobalModel:
             'Te_eV': Te_eV, 'densities': densities, 'Y': Y_vec, 't': t,
             'na': np.sum(densities), 'constants': self.const
         }
+        # Add geometry and constant_data BEFORE calling declarations_func
         params.update(self.mdef['geometry'])
         params.update(self.mdef['constant_data'])
+        
+        # Compute derived geometry if not present
+        if 'volume' not in params:
+            R = params.get('radius_m') or params.get('R')
+            L = params.get('length_m') or params.get('L')
+            if R and L:
+                params['volume'] = np.pi * (R**2) * L
+                params['area'] = 2 * np.pi * (R**2) + 2 * np.pi * R * L
+        
+        # Add common aliases that chemistry functions expect
+        if 'Th_K' in params and 'Tg_K' not in params:
+            params['Tg_K'] = params['Th_K']  # Tg_K is alias for gas temperature
         
         try:
             declared_params = self.mdef['declarations_func'](params)
@@ -285,11 +298,47 @@ class GlobalModel:
         print("Integration finished.")
         print(self.results.message)
 
-    def plot_results(self, output_filename=None, return_figure=False):
+    def save_results_txt(self, output_filename):
+        """
+        Save simulation results to a text file in gnuplot-compatible format.
+        
+        Args:
+            output_filename (str): Path to output text file
+        """
+        if self.results is None or not self.results.success:
+            print("No valid results to save. Simulation may have failed.")
+            return
+        
+        t, y = self.results.t, self.results.y
+        
+        # Calculate Te from energy density
+        ne = y[self.species.index('e'), :] + 1e-10
+        electron_energy_density = y[-1, :]
+        Te_eV = (2.0/3.0) * electron_energy_density / ne
+        
+        with open(output_filename, 'w') as f:
+            # Header with column names
+            f.write("# Global Model Results\n")
+            f.write(f"# Time(s)")
+            for species in self.species:
+                f.write(f"\t{species}(m^-3)")
+            f.write(f"\tTe(eV)\n")
+            
+            # Data rows
+            for i in range(len(t)):
+                f.write(f"{t[i]:.6e}")
+                for j in range(len(self.species)):
+                    f.write(f"\t{y[j, i]:.6e}")
+                f.write(f"\t{Te_eV[i]:.6e}\n")
+        
+        print(f"Results successfully saved to '{output_filename}'")
+
+    def plot_results(self, case_name=None, output_filename=None, return_figure=False):
         """
         Generates and displays, saves, or returns plots of the simulation results.
 
         Args:
+            case_name (str, optional): Name of the case for the plot title.
             output_filename (str, optional): Saves the plot to this file path.
             return_figure (bool, optional): If True, returns the matplotlib figure
                 object instead of showing or saving it. Useful for embedding in GUIs.
@@ -301,7 +350,12 @@ class GlobalModel:
 
         t, y = self.results.t, self.results.y
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 9))
-        fig.suptitle(f'Global Model Results: {self.mdef.get("name", "Untitled Model")}', fontsize=16)
+        
+        # Use case_name for title
+        if case_name:
+            fig.suptitle(f'Global Model Results: {case_name}', fontsize=16)
+        else:
+            fig.suptitle('Global Model Results', fontsize=16)
 
         for i, species in enumerate(self.species): ax1.plot(t, y[i, :], label=species)
         ax1.set_yscale('log'); ax1.set_title('Species Densities'); ax1.set_xlabel('Time (s)')

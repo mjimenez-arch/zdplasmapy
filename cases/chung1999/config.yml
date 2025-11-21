@@ -17,13 +17,16 @@ parameters:
 
 # --- Physical Setup ---
 geometry:
-  type: cylinder
+  type: cylindrical
   length_m: 0.48
   radius_m: 0.15
 
 # --- Physics Model Selection ---
-# This explicitly selects which transport model to use from the library.
-transport_model: "chung_1999"
+# Choose transport model implementation:
+#   - "declarations": Use custom declarations.py in this folder (default for publication cases)
+#   - "chung_1999": Use Chung1999_ICPCylindrical class from transport_models.py
+#   - "default": No transport physics (chemistry only)
+transport_model: "declarations"
 
 # --- Initial Conditions ---
 # Defines the low-density "seed" plasma to start the simulation.

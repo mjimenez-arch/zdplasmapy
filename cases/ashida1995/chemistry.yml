@@ -1,0 +1,33 @@
+# cases/ashida1995/chemistry.yml
+# Chemistry Set for Argon based on Ashida et al., J. Vac. Sci. Technol. A 13, 2498 (1995)
+
+# --- Species Definition ---
+# Mass is defined in atomic mass units (amu).
+species:
+  - { name: Ar,    mass_amu: 39.95 }
+  - { name: Ar_4s, mass_amu: 39.95 }
+  - { name: Ar_4p, mass_amu: 39.95 }
+  - { name: Ar+,   mass_amu: 39.95 }
+  - { name: e,     mass_amu: 5.48e-4 }
+
+# --- Reaction Definitions ---
+# The parser intelligently handles numbers (for constants) and strings (for formulas).
+# Shorthands: 'Te' is used for p['Te_eV'], 'Tg' for p['Th_K'].
+reactions:
+  # -- Volume Reactions --
+  - { formula: "Ar + e -> Ar + e",      rate_coeff: "1.84e-8 * Te**1.5",                           energy_loss: "(3/2)*Te*(2*p['constants']['m_e']/p['mass']['Ar'])", type: "elastic",           reference: "Ashida 1995" }
+  - { formula: "Ar + e -> Ar_4s + e",   rate_coeff: "5e-15 * Te**0.74 * exp(-11.56/Te)",           energy_loss: 11.56,                                                 type: "excitation",        reference: "Ashida 1995" }
+  - { formula: "Ar_4s + e -> Ar + e",   rate_coeff: "4.3e-16 * Te**0.74",                          energy_loss: -11.56,                                                type: "deexcitation",      reference: "Ashida 1995" }
+  - { formula: "Ar + e -> Ar_4p + e",   rate_coeff: "1.4e-14 * Te**0.71 * exp(-13.2/Te)",          energy_loss: 13.2,                                                  type: "excitation",        reference: "Ashida 1995" }
+  - { formula: "Ar_4p + e -> Ar + e",   rate_coeff: "3.9e-16 * Te**0.71",                          energy_loss: -13.2,                                                 type: "deexcitation",      reference: "Ashida 1995" }
+  - { formula: "Ar_4s + e -> Ar_4p + e", rate_coeff: "8.9e-13 * Te**0.51 * exp(-1.59/Te)",         energy_loss: 1.59,                                                  type: "step_excitation",   reference: "Ashida 1995" }
+  - { formula: "Ar_4p + e -> Ar_4s + e", rate_coeff: "3.0e-13 * Te**0.51",                         energy_loss: -1.59,                                                 type: "step_deexcitation", reference: "Ashida 1995" }
+  - { formula: "Ar + e -> Ar+ + 2e",    rate_coeff: "2.9e-14 * Te**0.68 * exp(-15.759/Te)",        energy_loss: 15.759,                                                type: "ionization",        reference: "Ashida 1995" }
+  - { formula: "Ar_4s + e -> Ar+ + 2e", rate_coeff: "6.8e-15 * Te**0.67 * exp(-4.2/Te)",           energy_loss: 4.2,                                                   type: "step_ionization",   reference: "Ashida 1995" }
+  - { formula: "Ar_4p + e -> Ar+ + 2e", rate_coeff: "1.8e-13 * Te**0.61 * exp(-2.61/Te)",          energy_loss: 2.61,                                                  type: "step_ionization",   reference: "Ashida 1995" }
+
+  # -- Wall Reactions --
+  # The rate and energy are provided at runtime by the selected transport model.
+  - { formula: "Ar+ -> Ar",   rate_coeff: "p.get('Loss_Ar_plus', 0.0)", energy_loss: "2*p.get('Vs', 0.0) + Te/2", type: "wall_loss", reference: "Ashida 1995" }
+  - { formula: "Ar_4s -> Ar", rate_coeff: "p.get('Loss_Ar_4s', 0.0)",   energy_loss: 0.0,                         type: "wall_loss", reference: "Ashida 1995" }
+  - { formula: "Ar_4p -> Ar", rate_coeff: "p.get('Loss_Ar_4p', 0.0)",   energy_loss: 0.0,                         type: "wall_loss", reference: "Ashida 1995" }
