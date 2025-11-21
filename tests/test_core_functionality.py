@@ -4,8 +4,8 @@ from src.config_parser import load_config
 
 class TestConfigParser(unittest.TestCase):
     def setUp(self):
-        self.good_config = os.path.join("cases", "chung_1999_o2_icp", "config.yml")
-        self.bad_config = os.path.join("cases", "chung_1999_o2_icp", "missing.yml")
+        self.good_config = os.path.join("cases", "chung1999", "config.yml")
+        self.bad_config = os.path.join("cases", "chung1999", "missing.yml")
 
     def test_load_good_config(self):
         config = load_config(self.good_config)
@@ -21,11 +21,12 @@ class TestConfigParser(unittest.TestCase):
     def test_missing_field(self):
         # Create a minimal config missing a required field
         import tempfile, yaml
+        import jsonschema
         with tempfile.NamedTemporaryFile('w+', delete=False, suffix='.yml') as tf:
-            yaml.dump({'chemistry_file': 'chemistry.yml'}, tf)
+            yaml.dump({'name': 'test', 'chemistry_file': 'chemistry.yml'}, tf)
             tf.flush()
             tf.close()
-            with self.assertRaises(ValueError):
+            with self.assertRaises(jsonschema.exceptions.ValidationError):
                 load_config(tf.name)
         os.unlink(tf.name)
 
