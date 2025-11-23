@@ -46,7 +46,7 @@ def validate_config_schema(config):
     
     try:
         jsonschema.validate(instance=config, schema=schema)
-        print("  ✓ Config validation passed")
+        print("  [OK] Config validation passed")
     except jsonschema.ValidationError as e:
         print(f"  ✗ Config validation failed:")
         print(f"    {e.message}")
