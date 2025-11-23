@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# eedf solvers
+external/loki-b/bin/
+external/loki-b/build/
+external/loki-b/*.exe
+eedf_cache/
+
+# Ignore entire external LOKI-B directory except its README documentation
+external/loki-b/*
+!external/loki-b/README.md
+
+# (Previous specific ignores for bin/build/exe are now covered by the wildcard)
