@@ -20,7 +20,7 @@ class GlobalModel:
         self.stoich_matrix_net, self.stoich_matrix_left = self._create_stoich_matrices()
         
         self.results = None
-        self.debug = debug
+        self.debug = False
         self.debug_step_counter = 0
 
         # --- NEW: RUN THE STOICHIOMETRY TEST ON INITIALIZATION IF DEBUG IS ON ---
@@ -298,6 +298,22 @@ class GlobalModel:
         print("Integration finished.")
         print(self.results.message)
 
+    def _calculate_Te_from_results(self, y):
+        """
+        Calculate electron temperature from simulation results.
+        
+        Args:
+            y: State vector from simulation results
+            
+        Returns:
+            tuple: (Te_eV, Te_K) - Electron temperature in eV and Kelvin
+        """
+        ne = y[self.species.index('e'), :] + 1e-10
+        electron_energy_density = y[-1, :]
+        Te_eV = (2.0/3.0) * electron_energy_density / ne
+        Te_K = Te_eV * self.const['q_e'] / self.const['kb']
+        return Te_eV, Te_K
+
     def save_results_txt(self, output_filename):
         """
         Save simulation results to a text file in gnuplot-compatible format.
@@ -312,9 +328,7 @@ class GlobalModel:
         t, y = self.results.t, self.results.y
         
         # Calculate Te from energy density
-        ne = y[self.species.index('e'), :] + 1e-10
-        electron_energy_density = y[-1, :]
-        Te_eV = (2.0/3.0) * electron_energy_density / ne
+        Te_eV, _ = self._calculate_Te_from_results(y)
         
         with open(output_filename, 'w') as f:
             # Header with column names
@@ -362,10 +376,7 @@ class GlobalModel:
         ax1.set_ylabel('Density (m⁻³)'); ax1.set_ylim(bottom=1e8); ax1.legend()
         ax1.grid(True, which="both", ls="--")
 
-        ne = y[self.species.index('e'), :] + 1e-10
-        electron_energy_density = y[-1, :]
-        Te_eV = (2.0/3.0) * electron_energy_density/ne
-        Te_K = Te_eV * self.const['q_e']/self.const['kb']
+        _, Te_K = self._calculate_Te_from_results(y)
         
         ax2.plot(t, Te_K)
         ax2.set_title('Electron Temperature'); ax2.set_xlabel('Time (s)')

@@ -17,6 +17,8 @@ import hashlib
 from pathlib import Path
 from typing import Dict, Callable, Optional, List
 import warnings
+import logging
+import numpy as np
 
 
 class EEDFSolver:
@@ -56,181 +58,196 @@ class EEDFSolver:
         raise NotImplementedError("Subclasses must implement build_rate_function")
 
 
+logger = logging.getLogger(__name__)
+
+
 class LokiBSolver(EEDFSolver):
-    """LOKI-B Boltzmann solver wrapper."""
-    
+    """LOKI-B Boltzmann solver wrapper.
+
+    Phase 1 implementation:
+    - Builds Te-based lookup tables for a reaction using placeholder input/output.
+    - Interpolates log(k) vs Te (numerically stable over wide ranges).
+    - Caches tables as .npz for reuse.
+    """
+
     def __init__(self, loki_executable: Optional[str] = None, cache_dir: Optional[Path] = None):
-        """Initialize LOKI-B solver.
-        
+        """Initialize solver and verify executable.
+
         Args:
-            loki_executable: Path to loki-b executable. If None, searches PATH.
-            cache_dir: Directory for caching lookup tables.
+            loki_executable: Path to loki-b executable. If None, search PATH.
+            cache_dir: Cache directory for rate tables.
         """
         super().__init__(cache_dir)
-        
-        # Find LOKI-B executable
         if loki_executable is None:
-            loki_executable = self._find_executable("loki-b")
-        
+            # Try common executable names from LoKI-B++ build layout.
+            loki_executable = self._auto_detect_executable()
         if not loki_executable or not Path(loki_executable).exists():
             raise FileNotFoundError(
-                "LOKI-B executable not found. Install loki-b-cpp and ensure it's in PATH, "
-                "or specify path with loki_executable='path/to/loki-b'"
+                "LoKI-B executable not found. Build LoKI-B++ (app/loki) or provide loki_executable path."
             )
-        
         self.loki_executable = loki_executable
         self._verify_installation()
-    
-    def _find_executable(self, name: str) -> Optional[str]:
-        """Search for executable in PATH."""
+        self._rate_tables: Dict[str, tuple] = {}
+
+    def _auto_detect_executable(self) -> Optional[str]:
+        """Attempt to locate LoKI-B++ executable in common places.
+
+        Search order:
+          1. Explicit names in PATH ("loki", "loki-b", "LoKI-B")
+          2. Local build folders: ./external/loki-b/LoKI-B-cpp/build/app/
+          3. ./bin/ directory if user copied binary there.
+        Returns first existing path or None.
+        """
         import shutil
-        return shutil.which(name)
-    
-    def _verify_installation(self):
-        """Verify LOKI-B is installed and working."""
+        candidates: List[str] = []
+        # PATH names
+        for name in ["loki", "loki-b", "LoKI-B", "loki.exe", "LoKI-B.exe"]:
+            found = shutil.which(name)
+            if found:
+                return found
+        # Local project relative paths
+        rel_paths = [
+            Path("external/loki-b/LoKI-B-cpp/build/app/loki"),
+            Path("external/loki-b/LoKI-B-cpp/build/app/LoKI-B"),
+            Path("bin/loki"),
+            Path("bin/LoKI-B"),
+            Path("bin/loki.exe"),
+            Path("bin/LoKI-B.exe"),
+        ]
+        for p in rel_paths:
+            if p.exists():
+                return str(p)
+        return None
+
+    def _verify_installation(self) -> None:
         try:
             result = subprocess.run(
                 [self.loki_executable, "--version"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             if result.returncode != 0:
-                warnings.warn(f"LOKI-B executable found but version check failed: {result.stderr}")
+                warnings.warn(f"LOKI-B version check failed: {result.stderr}")
         except Exception as e:
             warnings.warn(f"Could not verify LOKI-B installation: {e}")
-    
+
     def _generate_input_file(self, reaction_id: str, params: Dict, cross_section_file: str) -> Path:
-        """Generate LOKI-B input file for a reaction.
-        
-        Args:
-            reaction_id: Reaction identifier
-            params: Plasma parameters
-            cross_section_file: Path to cross-section data
-        
-        Returns:
-            Path to generated input file
-        """
-        # TODO: Generate LOKI-B input format
-        # This is a placeholder - actual format depends on LOKI-B requirements
+        """Placeholder JSON input generator for future ASCII format."""
         input_data = {
             "reaction": reaction_id,
             "electron_temperature_eV": params.get("Te_eV", 2.0),
             "reduced_field_Td": params.get("E_N_Td", 50.0),
-            "cross_section_file": cross_section_file
+            "cross_section_file": cross_section_file,
         }
-        
-        # Create unique filename based on parameters
         param_hash = hashlib.md5(json.dumps(input_data, sort_keys=True).encode()).hexdigest()[:8]
         input_file = self.cache_dir / f"loki_input_{param_hash}.json"
-        
-        with open(input_file, 'w') as f:
+        with open(input_file, "w") as f:
             json.dump(input_data, f, indent=2)
-        
         return input_file
-    
+
     def _run_loki(self, input_file: Path) -> Path:
-        """Run LOKI-B solver.
-        
-        Args:
-            input_file: Path to LOKI-B input file
-        
-        Returns:
-            Path to LOKI-B output file
-        """
+        """Invoke executable (placeholder command signature)."""
         output_file = input_file.with_suffix(".out")
-        
-        # Check if cached result exists
         if output_file.exists():
             return output_file
-        
-        # Run LOKI-B
         try:
-            result = subprocess.run(
+            subprocess.run(
                 [self.loki_executable, str(input_file), "-o", str(output_file)],
                 capture_output=True,
                 text=True,
                 timeout=60,
-                check=True
+                check=True,
             )
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"LOKI-B failed: {e.stderr}") from e
         except subprocess.TimeoutExpired:
-            raise RuntimeError("LOKI-B timed out after 60 seconds")
-        
+            raise RuntimeError("LOKI-B timed out after 60 s")
         return output_file
-    
+
     def _parse_output(self, output_file: Path) -> Dict:
-        """Parse LOKI-B output file.
-        
-        Args:
-            output_file: Path to LOKI-B output
-        
-        Returns:
-            Dict with rate coefficients and EEDF data
-        """
-        # TODO: Implement actual LOKI-B output parsing
-        # This is a placeholder - format depends on LOKI-B output
         if not output_file.exists():
-            raise FileNotFoundError(f"LOKI-B output not found: {output_file}")
-        
-        with open(output_file, 'r') as f:
-            # Placeholder: assume JSON output
+            raise FileNotFoundError(f"Missing LOKI-B output: {output_file}")
+        with open(output_file, "r") as f:
             try:
-                data = json.load(f)
-                return data
+                return json.load(f)
             except json.JSONDecodeError:
-                # If not JSON, implement custom parser
-                raise NotImplementedError("LOKI-B output parser not yet implemented")
-    
+                raise NotImplementedError("Non-JSON output parsing not implemented yet")
+
     def get_rate_coefficient(self, reaction_id: str, params: Dict) -> float:
-        """Compute rate coefficient using LOKI-B.
-        
-        Args:
-            reaction_id: Reaction identifier
-            params: Plasma parameters
-        
-        Returns:
-            Rate coefficient in m^3/s
-        """
-        # TODO: Implement lookup from precomputed table or on-demand calculation
-        raise NotImplementedError("get_rate_coefficient needs implementation")
-    
-    def build_rate_function(self, reaction_id: str, cross_section_file: str) -> Callable:
-        """Build rate coefficient function using LOKI-B lookup table.
-        
-        Args:
-            reaction_id: Reaction identifier
-            cross_section_file: Path to cross-section data file
-        
-        Returns:
-            Callable that takes params dict and returns rate coefficient
-        """
-        # Generate lookup table covering typical parameter range
-        # TODO: Implement adaptive grid or user-specified range
-        te_range = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]  # eV
-        
-        lookup_table = {}
+        """Return interpolated rate if table exists else raise."""
+        if reaction_id not in self._rate_tables:
+            raise KeyError(
+                f"Rate table for reaction '{reaction_id}' not built. Call build_rate_function first."
+            )
+        te = params.get("Te_eV", 2.0)
+        te_array, logk_array = self._rate_tables[reaction_id]
+        logk = np.interp(te, te_array, logk_array)
+        return float(np.exp(logk))
+
+    def build_rate_function(
+        self,
+        reaction_id: str,
+        cross_section_file: str,
+        te_range: Optional[List[float]] = None,
+        force_recompute: bool = False,
+    ) -> Callable:
+        if te_range is None:
+            te_range = [0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0]
+        cache_key = {
+            "reaction": reaction_id,
+            "xs_file": str(cross_section_file),
+            "te_range": te_range,
+            "version": 1,
+        }
+        table_hash = hashlib.md5(json.dumps(cache_key, sort_keys=True).encode()).hexdigest()[:10]
+        cache_file = self.cache_dir / f"loki_table_{table_hash}.npz"
+
+        if cache_file.exists() and not force_recompute:
+            try:
+                data = np.load(cache_file)
+                te_array = data["te"]
+                logk_array = data["logk"]
+                logger.debug(f"Loaded cached table {cache_file}")
+            except Exception as e:
+                logger.warning(f"Cache load failed ({e}); recomputing table")
+                te_array, logk_array = self._compute_table(reaction_id, cross_section_file, te_range, cache_file)
+        else:
+            te_array, logk_array = self._compute_table(reaction_id, cross_section_file, te_range, cache_file)
+
+        self._rate_tables[reaction_id] = (te_array, logk_array)
+
+        def rate_func(p: Dict) -> float:
+            te = p.get("Te_eV", 2.0)
+            logk = np.interp(te, te_array, logk_array)
+            return float(np.exp(logk))
+
+        return rate_func
+
+    def _compute_table(
+        self,
+        reaction_id: str,
+        cross_section_file: str,
+        te_range: List[float],
+        cache_file: Path,
+    ) -> tuple:
+        logk_values: List[float] = []
         for te in te_range:
             params = {"Te_eV": te}
             input_file = self._generate_input_file(reaction_id, params, cross_section_file)
             output_file = self._run_loki(input_file)
             result = self._parse_output(output_file)
-            lookup_table[te] = result.get("rate_coefficient", 0.0)
-        
-        # Return interpolation function
-        def rate_func(p: Dict) -> float:
-            """Interpolated rate coefficient from LOKI-B lookup table."""
-            import numpy as np
-            te = p.get("Te_eV", 2.0)
-            
-            # Simple linear interpolation (upgrade to scipy.interp1d if needed)
-            te_array = np.array(list(lookup_table.keys()))
-            rate_array = np.array(list(lookup_table.values()))
-            
-            return np.interp(te, te_array, rate_array)
-        
-        return rate_func
+            k = result.get("rate_coefficient", 0.0)
+            k = max(k, 1e-30)
+            logk_values.append(float(np.log(k)))
+        te_array = np.array(te_range, dtype=float)
+        logk_array = np.array(logk_values, dtype=float)
+        try:
+            np.savez(cache_file, te=te_array, logk=logk_array)
+            logger.debug(f"Cached table written: {cache_file}")
+        except Exception as e:
+            logger.warning(f"Failed to write cache {cache_file}: {e}")
+        return te_array, logk_array
 
 
 class MaxwellianSolver(EEDFSolver):
@@ -272,6 +289,7 @@ def get_solver(backend: str = "maxwellian", **kwargs) -> EEDFSolver:
     """
     solvers = {
         "loki-b": LokiBSolver,
+        "loki": LokiBSolver,  # alias
         "maxwellian": MaxwellianSolver,
     }
     

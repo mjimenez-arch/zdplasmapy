@@ -12,7 +12,7 @@ class TestChemistryParser(unittest.TestCase):
 
     def test_oxygen_chemistry_loads(self):
         """Test that oxygen chemistry file loads successfully."""
-        chem_file = 'cases/ashida1995/chemistry.yml'
+        chem_file = 'cases/chung1999/chemistry.yml'
         if not os.path.exists(chem_file):
             self.skipTest(f"Chemistry file {chem_file} not found")
         
@@ -27,7 +27,7 @@ class TestChemistryParser(unittest.TestCase):
 
     def test_oxygen_species_order(self):
         """Test that oxygen chemistry has expected species."""
-        chem_file = 'cases/ashida1995/chemistry.yml'
+        chem_file = 'cases/chung1999/chemistry.yml'
         if not os.path.exists(chem_file):
             self.skipTest(f"Chemistry file {chem_file} not found")
         
@@ -36,9 +36,9 @@ class TestChemistryParser(unittest.TestCase):
         # Check electron is present
         self.assertIn('e', species, "Electron species 'e' must be in species list")
         
-        # Check at least some argon species (ashida1995 is argon, not oxygen)
-        has_argon = any('Ar' in s for s in species)
-        self.assertTrue(has_argon, "Should have argon-containing species")
+        # Check at least some oxygen species
+        has_oxygen = any('O' in s for s in species)
+        self.assertTrue(has_oxygen, "Should have oxygen-containing species")
 
 
 class TestStoichiometry(unittest.TestCase):
@@ -46,7 +46,7 @@ class TestStoichiometry(unittest.TestCase):
 
     def test_stoichiometry_matrix_shape(self):
         """Test that stoichiometry matrices have correct dimensions."""
-        chem_file = 'cases/ashida1995/chemistry.yml'
+        chem_file = 'cases/chung1999/chemistry.yml'
         if not os.path.exists(chem_file):
             self.skipTest(f"Chemistry file {chem_file} not found")
         
@@ -71,7 +71,7 @@ class TestStoichiometry(unittest.TestCase):
 
     def test_charge_conservation(self):
         """Test that gas-phase reactions conserve charge (skip wall reactions)."""
-        chem_file = 'cases/ashida1995/chemistry.yml'
+        chem_file = 'cases/chung1999/chemistry.yml'
         if not os.path.exists(chem_file):
             self.skipTest(f"Chemistry file {chem_file} not found")
         
