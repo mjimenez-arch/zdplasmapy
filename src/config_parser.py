@@ -6,6 +6,7 @@ Supports optional Jinja2 templating for macros/parameter sweeps.
 import os
 import yaml
 import json
+from contextlib import suppress
 
 try:
     from jinja2 import Environment, FileSystemLoader

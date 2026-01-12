@@ -1,6 +1,9 @@
 # main.py — cleaned version
 
 import os
+import matplotlib
+matplotlib.use('Agg')
+
 import sys
 from src.config_parser import load_config
 from src.chemistry_parser import load_chemistry

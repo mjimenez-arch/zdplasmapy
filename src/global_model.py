@@ -1,6 +1,7 @@
 # global_model.py (Final Version with Integrated Stoichiometry Test)
 
 import numpy as np
+import os
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 import re
@@ -22,6 +23,15 @@ class GlobalModel:
         self.results = None
         self.debug = debug
         self.debug_step_counter = 0
+        
+        # EEDF integration attributes
+        self.eedf_enabled = self.mdef.get('eedf', {}).get('enabled', False)
+        if self.debug:
+            print(f"DEBUG: EEDF Enabled: {self.eedf_enabled}")
+            print(f"DEBUG: EEDF Config: {self.mdef.get('eedf', {})}")
+        self.eedf_backend = self.mdef.get('eedf', {}).get('backend', 'loki')
+        self.eedf_timestamps = self.mdef.get('eedf', {}).get('timestamps', [])
+        self.eedf_results = {}
 
         # --- NEW: RUN THE STOICHIOMETRY TEST ON INITIALIZATION IF DEBUG IS ON ---
         if self.debug:
@@ -117,6 +127,42 @@ class GlobalModel:
         except IOError as e:
             print(f"!!! ERROR: Could not write stoichiometry report file. {e} !!!")
 
+    def _get_eedf_rate_coefficient(self, reaction, t):
+        """
+        Retrieve EEDF-calculated rate coefficient for a specific reaction.
+        Uses the result from the nearest past timestamp.
+        """
+        if not self.eedf_results:
+            return 0.0
+            
+        # Find the most recent timestamp <= t
+        # (Assuming eedf_results are populated in order)
+        valid_ts = [ts for ts in self.eedf_results.keys() if ts <= t + 1e-9]
+        if not valid_ts:
+            return 0.0
+            
+        current_ts = max(valid_ts)
+        result = self.eedf_results[current_ts]
+        
+        # Look up rate by process ID (defined in chemistry.yml reactions_eedf)
+        # The reaction object should have a 'process' field if it's an EEDF reaction
+        process_id = reaction.get('process')
+        if not process_id:
+            # Fallback attempts to match formula if process ID is missing (risky)
+            return 0.0
+            
+        rate_coeffs = result.get('rate_coefficients', {})
+        
+        # Direct match
+        if process_id in rate_coeffs:
+            return rate_coeffs[process_id]
+            
+        # Debug / Warning
+        if self.debug and self.debug_step_counter % 100 == 0:
+             print(f"Warning: Process '{process_id}' not found in EEDF results. Available: {list(rate_coeffs.keys())}")
+             
+        return 0.0
+
     def _ode_system(self, t, y):
         # --- Enforce Physical Boundaries ---
         densities = np.maximum(y[:-1], 1e-10)
@@ -158,11 +204,112 @@ class GlobalModel:
             params.update(declared_params)
         except (ValueError, ZeroDivisionError) as e: return np.full_like(y, np.nan)
 
+        # --- EEDF logic: call backend at specified timestamps ---
+        if self.eedf_enabled:
+            eedf_opts = self.mdef.get('eedf', {}).get('options', {}) or {}
+            for ts in self.eedf_timestamps:
+                # Debug print for t=0 or close calls
+                # if self.debug and self.debug_step_counter < 3:
+                #      print(f"DEBUG: Checking EEDF trigger t={t}, ts={ts}, diff={abs(t-ts)}")
+                
+                if abs(t - ts) < 1e-9 and ts not in self.eedf_results:
+                    if self.debug: print(f"DEBUG: TRIGGERING EEDF at t={t}")
+                    
+                    # Compute fractions for NEUTRAL species only (LoKI-B expects background gas)
+                    neutral_indices = []
+                    neutral_species = []
+                    neutral_densities = []
+                    
+                    for idx, sp in enumerate(self.species):
+                        # Simple heuristic: neutral if no +, no -, and not 'e'
+                        if '+' not in sp and '-' not in sp and sp != 'e':
+                            neutral_indices.append(idx)
+                            neutral_species.append(sp)
+                            neutral_densities.append(densities[idx])
+                    
+                    total_neutral = sum(neutral_densities)
+                    if total_neutral > 1e-10:
+                        # Filter out trace species (< 1ppm) to avoid LoKI-B parser issues with missing XS or tiny numbers
+                        fractions = []
+                        valid_species = []
+                        
+                        for d, sp in zip(neutral_densities, neutral_species):
+                            frac = d / total_neutral
+                            if frac > 1e-6:
+                                fractions.append(frac)
+                                valid_species.append(sp)
+                        
+                        # Re-normalize
+                        f_sum = sum(fractions)
+                        if f_sum > 0:
+                            fractions = [f / f_sum for f in fractions]
+                        else:
+                             # Should not happen given total check, but fallback
+                             valid_species = [neutral_species[0]]
+                             fractions = [1.0]
+                    else:
+                        # Fallback to dominant species or first neutral
+                        valid_species = [neutral_species[0]]
+                        fractions = [1.0]
+
+                    # Prepare EEDF request with reaction cross-section info and user options
+                    request = {
+                        'gas': {'species': valid_species, 'fractions': fractions},
+                        'field': {
+                            'type': 'uniform',
+                            'value': eedf_opts.get('reduced_field_td', 100.0),
+                        },
+                        'pressure': params.get('gasPressure', 133.32),
+                        'temperature': params.get('Th_K', 300.0),
+                        'grid': {
+                            'emin': eedf_opts.get('grid', {}).get('emin_eV', 0.01),
+                            'emax': eedf_opts.get('grid', {}).get('emax_eV', 30.0),
+                            'points': eedf_opts.get('grid', {}).get('points', 200),
+                        },
+                        'options': {
+                            'reactions': self.mdef['reactions'],
+                            'physics': eedf_opts.get('physics', {}),
+                            'numerics': eedf_opts.get('numerics', {}),
+                        },
+                    }
+                    from src.eedf_solver import run_eedf
+                    if self.debug:
+                        import os
+                        print(f"DEBUG: CWD = {os.getcwd()}")
+                        print(f"DEBUG: EEDF Output Path check = {os.path.abspath('output/eedf')}")
+                        
+                    result = run_eedf(self.mdef, request)
+                    self.eedf_results[ts] = result
+                    
+                    # Debug output for EEDF results
+                    if self.debug:
+                        print("\n=== EEDF Results at t={:.3e} s ===".format(ts))
+                        rate_coeffs = result.get('rate_coefficients', {})
+                        if rate_coeffs:
+                            print("Rate Coefficients from LoKI-B:")
+                            for key, val in rate_coeffs.items():
+                                print(f"  {key:50s}: {val:.3e} m³/s")
+                        else:
+                            print("  WARNING: No rate coefficients found in EEDF output!")
+                        
+                        # Show power balance if available
+                        pb = result.get('diagnostics', {}).get('power_balance', {})
+                        if pb:
+                            print("\nPower Balance from LoKI-B:")
+                            for key, val in pb.items():
+                                print(f"  {key}: {val}")
+                        print("="*60 + "\n")
+
         # --- Chemical Rate Calculation ---
         num_reactions = len(self.mdef['reactions'])
         reaction_rates = np.zeros(num_reactions)
         for i, reaction in enumerate(self.mdef['reactions']):
-            k = reaction['rate_coeff_func'](params)
+            # Use EEDF rate coefficient if available
+            if reaction.get('use_eedf', False) and self.eedf_results:
+                k = self._get_eedf_rate_coefficient(reaction, t)
+            else:
+                k = reaction['rate_coeff_func'](params)
+            
             rate = k
             reactants = self.stoich_matrix_left[i, :]
             for j in range(self.num_species):
@@ -248,7 +395,8 @@ class GlobalModel:
             print(f"  Q_abs = {Q_abs: 1.2e}, Total Q_loss = {Q_loss: 1.2e}")
             print(f"  -> d(Energy)/dt = {dE_dt:.3e}")
             print("-"*(len(str(t))+25))
-            self.debug_step_counter += 1
+            print("-"*(len(str(t))+25))
+        self.debug_step_counter += 1
         
         derivatives = np.append(dY_dt, dE_dt)
         if not np.all(np.isfinite(derivatives)):
@@ -298,6 +446,22 @@ class GlobalModel:
         print("Integration finished.")
         print(self.results.message)
 
+    def _calculate_Te_from_results(self, y):
+        """
+        Calculate electron temperature from simulation results.
+        
+        Args:
+            y: State vector from simulation results
+            
+        Returns:
+            tuple: (Te_eV, Te_K) - Electron temperature in eV and Kelvin
+        """
+        ne = y[self.species.index('e'), :] + 1e-10
+        electron_energy_density = y[-1, :]
+        Te_eV = (2.0/3.0) * electron_energy_density / ne
+        Te_K = Te_eV * self.const['q_e'] / self.const['kb']
+        return Te_eV, Te_K
+
     def save_results_txt(self, output_filename):
         """
         Save simulation results to a text file in gnuplot-compatible format.
@@ -312,9 +476,7 @@ class GlobalModel:
         t, y = self.results.t, self.results.y
         
         # Calculate Te from energy density
-        ne = y[self.species.index('e'), :] + 1e-10
-        electron_energy_density = y[-1, :]
-        Te_eV = (2.0/3.0) * electron_energy_density / ne
+        Te_eV, _ = self._calculate_Te_from_results(y)
         
         with open(output_filename, 'w') as f:
             # Header with column names
@@ -362,10 +524,7 @@ class GlobalModel:
         ax1.set_ylabel('Density (m⁻³)'); ax1.set_ylim(bottom=1e8); ax1.legend()
         ax1.grid(True, which="both", ls="--")
 
-        ne = y[self.species.index('e'), :] + 1e-10
-        electron_energy_density = y[-1, :]
-        Te_eV = (2.0/3.0) * electron_energy_density/ne
-        Te_K = Te_eV * self.const['q_e']/self.const['kb']
+        _, Te_K = self._calculate_Te_from_results(y)
         
         ax2.plot(t, Te_K)
         ax2.set_title('Electron Temperature'); ax2.set_xlabel('Time (s)')

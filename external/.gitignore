@@ -1,0 +1,7 @@
+# Ignore the LoKI-B-cpp repository
+LoKI-B-cpp/
+
+# But keep the setup scripts
+!setup_loki_b.sh
+!README.md
+!.gitignore

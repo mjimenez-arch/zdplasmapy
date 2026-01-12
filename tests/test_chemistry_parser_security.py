@@ -1,7 +1,7 @@
 import unittest
 import math
 
-from src.chemistry_parser import _build_lambda
+from src.chemistry_parser import build_lambda as _build_lambda
 
 
 class TestChemistryParserSecurity(unittest.TestCase):

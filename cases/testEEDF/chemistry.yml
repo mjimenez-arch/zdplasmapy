@@ -1,0 +1,39 @@
+# cases/testEEDF/chemistry.yml
+# Oxygen chemistry for EEDF solver validation (based on Chung 1999)
+# EEDF-driven reactions use cross-sections from LXCat database
+
+# --- Species Definition ---
+species:
+  - { name: O2,  mass_amu: 32.0 }
+  - { name: O2+, mass_amu: 32.0 }
+  - { name: O,   mass_amu: 16.0 }
+  - { name: O+,  mass_amu: 16.0 }
+  - { name: O-,  mass_amu: 16.0 }
+  - { name: e,   mass_amu: 5.48e-4 }
+
+# --- EEDF Cross-Section Database ---
+# Defines electron-impact reactions using cross-section data
+reactions_eedf:
+  file: "external/LoKI-B-cpp/input/Oxygen/O2_LXCat.txt"
+  reference: "Phelps 1985, www.LXCat.net"
+  reactions:
+    - {formula: "e + O2 -> e + O2", process: "O2 -> O2", energy_loss: "(3/2)*Te*(2*p['constants']['m_e']/p['mass']['O2'])", type: "elastic"}
+    - {formula: "e + O2 -> O2+ + 2e", process: "O2 -> O2^+", energy_loss: 12.1, type: "ionization"}
+
+# --- Standard Reactions (analytic rate coefficients) ---
+
+reactions:
+  # -- Volume Reactions (analytic formulas) --
+  - {formula: "e + O2 -> O + O-", rate_coeff: "8.8e-17 * exp(-4.4/Te)", energy_loss: 4.4, type: "attachment", reference: "Chung 1999"}
+  - {formula: "O2+ + O- -> O2 + O", rate_coeff: "1.5e-13 * (300/Tg)**0.5", energy_loss: 0.0, type: "recombination", reference: "Chung 1999"}
+  - {formula: "O- + O+ -> 2O", rate_coeff: "2.5e-13 * (300/Tg)**0.5", energy_loss: 0.0, type: "recombination", reference: "Chung 1999"}
+  - {formula: "e + O- -> O + 2e", rate_coeff: "2.0e-13 * exp(-5.5/Te)", energy_loss: 5.5, type: "detachment", reference: "Chung 1999"}
+  - {formula: "e + O2 -> O- + O+ + e", rate_coeff: "7.1e-17 * Te**0.5 * exp(-17/Te)", energy_loss: 4.4, type: "pair_production", reference: "Chung 1999"}
+  - {formula: "e + O2 -> O + O+ + 2e", rate_coeff: "5.3e-17 * Te**0.9 * exp(-20/Te)", energy_loss: 4.4, type: "dissoc_ionization", reference: "Chung 1999"}
+  - {formula: "e + O -> O+ + 2e", rate_coeff: "9.0e-15 * Te**0.7 * exp(-13.6/Te)", energy_loss: 13.6, type: "ionization", reference: "Chung 1999"}
+  - {formula: "O2 + e -> 2O + e", rate_coeff: "4.2e-15 * exp(-5.6/Te)", energy_loss: 5.62, type: "dissociation", reference: "Chung 1999"}
+
+  # -- Wall Reactions --
+  - {formula: "O+ -> O", rate_coeff: "p.get('Oplus_loss', 0.0)", energy_loss: "p.get('Vs_Oplus', 0.0)", type: "wall_loss", reference: "Chung 1999"}
+  - {formula: "O2+ -> O2", rate_coeff: "p.get('O2plus_loss', 0.0)", energy_loss: "p.get('Vs_O2plus', 0.0)", type: "wall_loss", reference: "Chung 1999"}
+  - {formula: "O -> 0.5O2", rate_coeff: "p.get('Oloss', 0.0)", energy_loss: 0.0, type: "wall_loss", reference: "Chung 1999"}
