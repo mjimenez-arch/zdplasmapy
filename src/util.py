@@ -111,6 +111,8 @@ def build_model_definition(config_path):
             't_end': config.get('parameters', {}).get('time_end_s', 1.0)
         },
         'declarations_func': wrapped_declarations_func,
+        # Propagate EEDF settings if present
+        'eedf': config.get('additional_parameters', {}).get('eedf') or config.get('eedf', {}),
     }
     return model_definition
 import yaml

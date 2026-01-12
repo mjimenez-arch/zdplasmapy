@@ -45,9 +45,18 @@
 - Test expectations:  
   Species order in `input_models/oxygen.py` is `['O2','O2+','O','O+','O-','e']`.
 
+**EEDF Integration (New)**
+- EEDF solver: `src/eedf_solver.py` provides pluggable backend (LoKI-B, future BOLSIG+/Bolos).
+- Chemistry files: `reactions_eedf` section for cross-section-driven reactions.
+- Config files: EEDF settings in `additional_parameters.eedf` (enabled, backend, timestamps).
+- Pattern: Reactions with `use_eedf: True` get rate coefficients from EEDF at specified timestamps.
+- Cross-sections: Project-relative paths, auto-detection in `external/LoKI-B-cpp/input/<Species>/`.
+- Example: `cases/testEEDF/` demonstrates Oxygen plasma with LoKI-B integration.
+
 **PR Guidance**
 - Small fixes: direct commit.
 - Changes to numerical behavior: require justification, regression test, and example output.
+- EEDF changes: verify cross-section file compatibility, test with existing cases.
 
 ---
 If you want more examples or stricter rules, let me know which files or workflows to expand.

@@ -17,8 +17,11 @@ def load_config(config_path):
         config = yaml.safe_load(f)
     
     # Resolve chemistry file path relative to config file location
-    config_dir = os.path.dirname(config_path)
-    chemistry_file = config['chemistry']['file']
-    config['chemistry']['absolute_path'] = os.path.join(config_dir, chemistry_file)
-    
-    return config
+    # Parse EEDF section if present (allow under root or additional_parameters)
+    eedf_config = config.get('eedf') or config.get('additional_parameters', {}).get('eedf', {})
+    config['eedf'] = {
+        'enabled': bool(eedf_config.get('enabled', False)),
+        'backend': eedf_config.get('backend', 'loki'),
+        'timestamps': eedf_config.get('timestamps', []),
+        'options': eedf_config.get('options', {}),
+    }

@@ -1,0 +1,35 @@
+name: "EEDF Test Case - Oxygen Plasma"
+description: "EEDF integration using LoKI-B solver with Oxygen chemistry (Chung 1999)"
+
+chemistry:
+  file: "chemistry.yml"
+
+parameters:
+  pressure_Pa: 133.32
+  power_W: 10.0
+  gas_temp_K: 300.0
+  time_end_s: 1.0e-3
+
+geometry:
+  type: cylindrical
+  radius_m: 0.05
+  length_m: 0.1
+
+transport_model: "declarations"
+
+initial_conditions:
+  Te_eV: 2.0
+  species_densities:
+    O2: 2.41e20
+    O2+: 1.0e14
+    O: 1.0e12
+    O+: 1.0e12
+    O-: 1.0e12
+    e: 1.0e14
+
+additional_parameters:
+  reduced_field_Td: 100.0
+  eedf:
+    enabled: true
+    backend: loki
+    timestamps: [0.0, 1.0e-6, 5.0e-6, 1.0e-5, 5.0e-5, 1.0e-4, 5.0e-4, 1.0e-3]

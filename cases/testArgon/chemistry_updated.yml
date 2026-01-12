@@ -1,0 +1,22 @@
+species:
+  - {name: "Ar", mass_amu: 39.948}
+  - {name: "Ar*", mass_amu: 39.948}
+  - {name: "Ar+", mass_amu: 39.948}
+  - {name: "e", mass_amu: 0.000549}
+
+reactions:
+  # Three-body recombination: Ar+ + e + e -> Ar + e (analytical only)
+  - {formula: "Ar+ + e + e -> Ar + e", rate_coeff: "8.75e-27 * (300/Tg)**1.5", energy_loss: -15.8, type: "recombination", reference: "todo"}
+
+reactions_eedf:
+  file: external/LoKI-B-cpp/input/Ar/cs_Ar_LXCat.txt
+  reference: "LXCat cross-sections - All electron-impact processes"
+  reactions:
+    # Elastic: Ar + e -> Ar + e (from LXCat, for energy transfer)
+    - {formula: "e + Ar -> e + Ar", process: "E + Ar -> E + Ar, Elastic", energy_loss: "(3/2)*Te*(2*p['constants']['m_e']/p['mass']['Ar'])", type: "elastic"}
+    
+    # Excitation: Ar + e -> Ar* + e (from LXCat)
+    - {formula: "e + Ar -> e + Ar*", process: "Ar -> Ar*(11.5eV)", energy_loss: 11.5, type: "excitation"}
+    
+    # Ionization: Ar + e -> Ar+ + 2e (from LXCat)
+    - {formula: "e + Ar -> Ar+ + 2e", process: "Ar -> Ar^+", energy_loss: 15.8, type: "ionization"}

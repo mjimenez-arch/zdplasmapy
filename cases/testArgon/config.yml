@@ -1,0 +1,43 @@
+name: testArgon
+description: "Argon plasma with EEDF-based rate coefficients (Plasimo round-robin model)"
+
+chemistry:
+  file: ./chemistry.yml
+
+parameters:
+  pressure_Pa: 100.0
+  power_W: 314.0
+  gas_temp_K: 300.0
+  time_end_s: 0.01
+
+geometry:
+  type: cylindrical
+  radius_m: 0.01
+  length_m: 0.1
+
+transport_model: declarations
+
+initial_conditions:
+  Te_eV: 1.0
+  species_densities:
+    Ar: 2.414e22
+    Ar_excited: 0.0
+    Ar_plus: 1.0e6
+    e: 1.0e6
+
+additional_parameters:
+  declarations_path: ./declarations.py
+  eedf:
+    enabled: true
+    backend: loki
+    timestamps: [0.0]
+    options:
+      reduced_field_td: 100.0
+      physics:
+        coulomb_collisions: false
+      numerics:
+        energy_grid:
+          emax_eV: 30.0
+          points: 299
+        precision: 1.0e-9
+        convergence: 1.0e-4
