@@ -1,5 +1,5 @@
 # DISCLAIMER: this project is a prototype playground that is fully developed with AI tools. 
-My goal is to see how far and fast different prototypes of global model tools can be developed. I focus on workflow design with AI agents, regresion tests in github, rapid design of simulation tools, input and output format, and validation of chemistry cases, among others.
+My goal is to see how far and fast different prototypes of global model tools can be developed. I focus on workflow design with AI agents, regresion tests in github, rapid design of simulation tools, input and output format, and validation of chemistry cases, among others. Thus, certain files might be contradictory. For example, this readme might not work and should be considered a work in progress. I advice to use AI agents always with this repository. 
 
 # Zero Dimensional Plasma Python (ZDPlasmaPy)
 
