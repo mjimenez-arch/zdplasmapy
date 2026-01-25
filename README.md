@@ -1,3 +1,6 @@
+# DISCLAIMER: this project is a prototype playground that is fully developed with AI tools. 
+My goal is to see how far and fast different prototypes of global model tools can be developed. I focus on workflow design with AI agents, regresion tests in github, rapid design of simulation tools, input and output format, and validation of chemistry cases, among others.
+
 # Zero Dimensional Plasma Python (ZDPlasmaPy)
 
 [![Python CI](https://github.com/mjimenez-arch/zdplasmapy/actions/workflows/python-ci.yml/badge.svg)](https://github.com/mjimenez-arch/zdplasmapy/actions/workflows/python-ci.yml)
