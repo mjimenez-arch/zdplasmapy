@@ -127,10 +127,11 @@ class GlobalModel:
         except IOError as e:
             print(f"!!! ERROR: Could not write stoichiometry report file. {e} !!!")
 
-    def _get_eedf_rate_coefficient(self, reaction, t):
+    def _get_eedf_rate_coefficient(self, reaction, t, params=None):
         """
         Retrieve EEDF-calculated rate coefficient for a specific reaction.
         Uses the result from the nearest past timestamp.
+        If result is a Lookup Table, uses params['reduced_field_Td'] to interpolate.
         """
         if not self.eedf_results:
             return 0.0
@@ -144,24 +145,122 @@ class GlobalModel:
         current_ts = max(valid_ts)
         result = self.eedf_results[current_ts]
         
+        # Check for LookUp Table (Scan)
+        if result.get("type") == "lookup_table":
+            if params is None:
+                if self.debug: print("Warning: EEDF Lookup Table requires params to interpolate.")
+                return 0.0
+                
+            reduced_field = params.get("reduced_field_Td", 0.0)
+            entries = result.get("entries", [])
+            process_id = reaction.get('process')
+            
+            if not entries or not process_id:
+                return 0.0
+
+            # Find bounding indices for interpolation
+            # Entries are sorted by reduced_field_Td
+            fields = [e["reduced_field_Td"] for e in entries]
+            import bisect
+            idx = bisect.bisect_right(fields, reduced_field)
+            
+            if idx == 0:
+                # Below range, clamp to first
+                target_entry = entries[0]
+                k = target_entry["rate_coefficients"].get(process_id, 0.0)
+            elif idx == len(fields):
+                # Above range, clamp to last
+                target_entry = entries[-1]
+                k = target_entry["rate_coefficients"].get(process_id, 0.0)
+            else:
+                # Linear Interpolation
+                f0 = fields[idx-1]
+                f1 = fields[idx]
+                entry0 = entries[idx-1]
+                entry1 = entries[idx]
+                
+                k0 = entry0["rate_coefficients"].get(process_id, 0.0)
+                k1 = entry1["rate_coefficients"].get(process_id, 0.0)
+                
+                # Interpolate log(k) or linear k? Usually log(k) is better for rates, 
+                # but linear for now is safer/simpler.
+                weight = (reduced_field - f0) / (f1 - f0)
+                k = k0 + weight * (k1 - k0)
+            
+            return k
+
+        # Legacy / Single Point Mode
         # Look up rate by process ID (defined in chemistry.yml reactions_eedf)
-        # The reaction object should have a 'process' field if it's an EEDF reaction
         process_id = reaction.get('process')
         if not process_id:
-            # Fallback attempts to match formula if process ID is missing (risky)
             return 0.0
             
         rate_coeffs = result.get('rate_coefficients', {})
         
-        # Direct match
         if process_id in rate_coeffs:
             return rate_coeffs[process_id]
             
-        # Debug / Warning
         if self.debug and self.debug_step_counter % 100 == 0:
              print(f"Warning: Process '{process_id}' not found in EEDF results. Available: {list(rate_coeffs.keys())}")
              
         return 0.0
+
+    def _get_swarm_parameter(self, param_name, t, params=None):
+        """
+        Retrieve EEDF-calculated swarm parameter (e.g. 'mobility').
+        Uses the result from the nearest past timestamp.
+        """
+        if not self.eedf_results:
+            return 0.0
+            
+        valid_ts = [ts for ts in self.eedf_results.keys() if ts <= t + 1e-9]
+        if not valid_ts:
+            return 0.0
+            
+        current_ts = max(valid_ts)
+        result = self.eedf_results[current_ts]
+        
+        # Check for LookUp Table (Scan)
+        if result.get("type") == "lookup_table":
+            if params is None: return 0.0
+            reduced_field = params.get("reduced_field_Td", 0.0)
+            entries = result.get("entries", [])
+            
+            if not entries: return 0.0
+
+            fields = [e["reduced_field_Td"] for e in entries]
+            import bisect
+            idx = bisect.bisect_right(fields, reduced_field)
+            
+            def get_val(entry):
+                sp = entry.get("swarm_parameters", {})
+                val = sp.get(param_name)
+                
+                # Debug: Print keys if looking for something specific
+                if self.debug and self.debug_step_counter == 0 and "mobility" in param_name:
+                    print(f"DEBUG: Looking for '{param_name}'. Available keys in Swarm Params: {list(sp.keys())}")
+
+                # Fallback: check if it's nested or named differently
+                if val is None: val = entry.get("rate_coefficients", {}).get(param_name, 0.0)
+                
+                if val is None and self.debug and self.debug_step_counter == 0:
+                     print(f"DEBUG: Swarm Param '{param_name}' not found. Available Swarm: {list(sp.keys())}")
+                return val
+
+            if idx == 0:
+                val = get_val(entries[0])
+            elif idx == len(fields):
+                val = get_val(entries[-1])
+            else:
+                f0, f1 = fields[idx-1], fields[idx]
+                v0, v1 = get_val(entries[idx-1]), get_val(entries[idx])
+                weight = (reduced_field - f0) / (f1 - f0)
+                val = v0 + weight * (v1 - v0)
+            return val
+
+        # Legacy / Single Point Mode
+        swarm_params = result.get('swarm_parameters', {})
+        return swarm_params.get(param_name, 0.0)
 
     def _ode_system(self, t, y):
         # --- Enforce Physical Boundaries ---
@@ -306,7 +405,7 @@ class GlobalModel:
         for i, reaction in enumerate(self.mdef['reactions']):
             # Use EEDF rate coefficient if available
             if reaction.get('use_eedf', False) and self.eedf_results:
-                k = self._get_eedf_rate_coefficient(reaction, t)
+                k = self._get_eedf_rate_coefficient(reaction, t, params)
             else:
                 k = reaction['rate_coeff_func'](params)
             
@@ -320,7 +419,7 @@ class GlobalModel:
         dY_dt = np.zeros(self.num_species)
         for i in range(self.num_species): dY_dt[i] = np.sum(reaction_rates * self.stoich_matrix_net[:, i])
 
-        # --- PLASIMO-style Pressure-Controlled Mass Flow Physics ---
+        # --- Pressure-Controlled Mass Flow Physics ---
         if 'flow_parameters' in self.mdef:
             fp = self.mdef['flow_parameters']
             
@@ -368,10 +467,58 @@ class GlobalModel:
         
         # --- Power Balance Equation ---
         # ... (The rest of the function remains unchanged and correct)
+        # --- Power Balance Equation ---
+        power_W = 0.0
         if 'power_input_func' in self.mdef:
             power_W = self.mdef['power_input_func'](t, params['volume'])
         else:
             power_W = self.mdef.get('constant_data', {}).get('power_input_W', 0.0)
+        
+        # If Power is 0, check if we should use Field-Driven (Joule Heating)
+        if power_W == 0.0 and self.eedf_enabled:
+            # P_abs = e * ne * mu * E^2 * Volume
+            # E = (E/N) * N
+            # mu obtained from EEDF lookup
+            
+            # 1. Get Reduced Field (Td) -> already in params['reduced_field_Td']
+            E_N_Td = params.get('reduced_field_Td', 0.0)
+            E_N_SI = E_N_Td * 1e-21
+            
+            # 2. Get Gas Density N (m^-3)
+            # Ideal gas law: p = N k T -> N = p / (k T)
+            # In global model, N is strictly speaking sum of neutrals?
+            # Or is E/N defined relative to total density? Usually total gas density.
+            # Use 'na' (total density) calculated earlier
+            N_gas = params.get('na', 0.0) 
+            
+            # 3. Calculate E field (V/m)
+            E_field = E_N_SI * N_gas
+            
+            # 4. Get Mobility (mu) * N from LoKI? Or just Mobility?
+            # LoKI typically outputs 'Reduced mobility coefficient' in 1/(m*V*s) which is mu * N.
+            mu_N = self._get_swarm_parameter('Reduced mobility coefficient', t, params)
+            if mu_N == 0.0:
+                 # Try fallback key
+                 mu_N = self._get_swarm_parameter('mobility', t, params)
+            
+            # Calculate mu = (mu*N) / N
+            if mu_N > 0.0 and N_gas > 0:
+                mu_e = mu_N / N_gas
+                
+                # 5. Calculate Joule Power
+                # P = e * ne * mu * E^2 * V
+                ne = densities[self.species.index('e')]
+                vol = params['volume']
+                
+                # Check bounds
+                ne = max(ne, 1e-10) # safety
+                
+                Joule_Power_Density = self.const['q_e'] * ne * mu_e * (E_field**2)
+                power_W = Joule_Power_Density * vol
+                
+                if self.debug and (t > 1.0e-5 or power_W > 0.0):
+                     print(f"DEBUG: Joule Heating: t={t:.2e}, E/N={E_N_Td:.2f} Td, E={E_field:.2f} V/m, mu*N={mu_N:.2e}, mu={mu_e:.2e} -> P={power_W:.4e} W")
+        
         Q_abs = power_W / self.const['q_e'] / params['volume']
         
         Q_loss = 0.0
@@ -389,10 +536,46 @@ class GlobalModel:
                 k_val = reaction['rate_coeff_func'](params)
                 print(f"  {i:<2}| {k_val: 1.2e}       | {reaction_rates[i]: 1.2e}   | {energy_loss: 1.2e}    | {q_loss_i: 1.2e}     | {reaction['formula']}")
 
-        dE_dt = Q_abs - Q_loss
+        # --- Energy Equation Handling ---
+        if self.eedf_enabled:
+            # Local Field Approximation (LFA):
+            # Force Electron Energy to track the EEDF equilibrium value from the lookup table.
+            # LoKI-B provides "Mean energy" (epsilon) in eV.
+            # Energy Density y[4] = n_e * epsilon.
+            # Note: "Electron temperature" in LoKI might be 2/3 epsilon or defined via mobility. 
+            # We use Mean Energy directly as it represents the total kinetic energy.
+            
+            mean_energy_target = self._get_swarm_parameter("Mean energy", t, params)
+            
+            if mean_energy_target is not None and mean_energy_target > 0:
+                # Calculate Target Energy Density (eV/m^3)
+                # y[4] is Energy Density. 
+                # Be careful: In get_initial_conditions, we initialized y[4] = 1.5 * ne * Te.
+                # If we use Mean Energy (epsilon), then U = ne * epsilon.
+                e_idx = self.species.index('e') # Ensure defined
+                ne = densities[e_idx]
+                target_energy_density = ne * mean_energy_target
+                
+                # Relaxation time constant (very fast to enforce LFA)
+                # Should be related to energy relaxation time, but for LFA we want instantaneous.
+                tau_relax = 1e-9 
+                
+                dE_dt = (target_energy_density - y[-1]) / tau_relax
+                
+                # Debug output for LFA
+                if self.debug and (t > 1.0e-5 or t == 0.0):
+                     print(f"DEBUG: LFA Forcing: E/N={E_N_Td:.2f} Td -> MeanEnergy={mean_energy_target:.3f} eV. Current U={y[-1]:.2e}, Target U={target_energy_density:.2e} -> dE/dt={dE_dt:.2e}")
+            else:
+                # Fallback to Power Balance if lookup fails (e.g. E/N=0)
+                dE_dt = Q_abs - Q_loss
+        else:
+            # Standard Power Balance
+            dE_dt = Q_abs - Q_loss
+
         if self.debug and self.debug_step_counter < 5:
             print("  -------------------------------------------------------------------------")
-            print(f"  Q_abs = {Q_abs: 1.2e}, Total Q_loss = {Q_loss: 1.2e}")
+            if not self.eedf_enabled or mean_energy_target is None:
+                print(f"  Q_abs = {Q_abs: 1.2e}, Total Q_loss = {Q_loss: 1.2e}")
             print(f"  -> d(Energy)/dt = {dE_dt:.3e}")
             print("-"*(len(str(t))+25))
             print("-"*(len(str(t))+25))

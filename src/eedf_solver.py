@@ -257,21 +257,37 @@ def _build_loki_input(req: Dict[str, Any]) -> str:
         
         if ground_state == 'O2(X)':
             # Use Boltzmann distribution for O2(X) manifold
-            state_pop_lines.append(f"      - {ground_state}:")
-            state_pop_lines.append(f"        type: boltzmann")
-            state_pop_lines.append(f"        temperature: {temperature}")
+            state_pop_lines.append(f"      - {ground_state} = boltzmannPopulation@gasTemperature")
         else:
             state_pop_lines.append(f"      - {ground_state} = 1.0")
     
+    # Determine if we have a single point or a scan
+    # Check if field value is a string (e.g. "linspace(...)") or float
+    field_val = field.get("value", 100.0)
+    if isinstance(field_val, str):
+        reduced_field_str = field_val
+    else:
+        reduced_field_str = f"{field_val}"
+        
+    if isinstance(temperature, str):
+        te_str = temperature
+    else:
+        te_str = f"{temperature}" # e.g. 1 (the initial Te guess for Boltzmann solver)
+        # Note: loki usually takes electronTemperature as a guess or a range?
+        # For 'boltzmann' EEDF type, this parameter might be the thermal energy of the lattice?
+        # No, 'electronTemperature' in 'workingConditions' is usually the initial guess OR the fixed value 
+        # if 'prescribedEedf' is used.
+        # But for 'boltzmann', it acts as a guess.
+        
     # Build minimal LoKI input
     loki_input = f"""% Auto-generated input for zdplasmapy EEDF solver
 
 workingConditions:
-  reducedField: {field.get("value", 100.0)}
-  electronTemperature: 1
+  reducedField: {reduced_field_str}
+  electronTemperature: {te_str}
   excitationFrequency: 0
   gasPressure: {pressure}
-  gasTemperature: {temperature}
+  gasTemperature: {temperature}  % This is gas temperature (usually float)
   electronDensity: 1e19
   chamberLength: 1.0
   chamberRadius: 1.0
@@ -339,38 +355,125 @@ def _parse_loki_output(payload: str) -> Dict[str, Any]:
     return {"energy_grid": energy, "eedf": eedf, "diagnostics": {"format": "text"}}
 
 
-def _parse_loki_json_output(payload: str) -> Dict[str, Any]:
+def _parse_loki_json_output(output_dir: str) -> Dict[str, Any]:
     """
-    Parse LoKI-B JSON output (output.json format).
-    Prefer this over text parsing when available.
+    Parse LoKI-B JSON output from the given directory.
+    Handles both single-point runs and parameter scans (LookUpTable).
     """
+    json_path = os.path.join(output_dir, "output.json")
+    if not os.path.exists(json_path):
+        return {}
+
     try:
-        data = json.loads(payload)
-        # Extract EEDF and energy grid from JSON structure
-        # Adjust keys based on actual LoKI JSON output format
-        energy = data.get("energyGrid") or data.get("energy_grid") or data.get("energy") or []
-        eedf = data.get("eedf") or data.get("f") or []
+        with open(json_path, "r") as f:
+            data = json.load(f)
+            
+        # Check for Scan Mode (keys like "reducedField_10", "reducedField_20"...)
+        scan_keys = [k for k in data.keys() if k.startswith("reducedField_")]
         
-        # Extract rate coefficients (key for EEDF integration)
-        rate_coeffs = data.get("rateCoefficients") or data.get("rate_coefficients") or {}
-        swarm_params = data.get("swarmParameters") or data.get("swarm_parameters") or {}
-        power_balance = data.get("powerBalance") or data.get("power_balance") or {}
-        
-        diagnostics = {
-            "format": "json",
-            "swarm_parameters": swarm_params,
-            "power_balance": power_balance,
-        }
-        
-        return {
-            "energy_grid": energy, 
-            "eedf": eedf, 
-            "rate_coefficients": rate_coeffs,
-            "diagnostics": diagnostics
-        }
-    except json.JSONDecodeError:
-        # Fallback to text parsing
-        return _parse_loki_output(payload)
+        if scan_keys:
+            # Parse as Lookup Table
+            print(f"DEBUG: Detected Parameter Scan with {len(scan_keys)} points.")
+            table_entries = []
+            
+            for key in scan_keys:
+                # Extract field value from key (e.g. reducedField_10.5 -> 10.5)
+                # Or from the data inside if available?
+                # Data inside usually has "workingConditions": {"reducedField": val} ?
+                # The key format is usually user-defined or automatic. 
+                # Let's try to get it from the key suffix first.
+                try:
+                    # LoKI key format: reducedField_<val>
+                    val_str = key.replace("reducedField_", "")
+                    reduced_field = float(val_str)
+                except ValueError:
+                    reduced_field = 0.0 # Fallback
+                
+                entry_data = data[key]
+                rates = entry_data.get("rateCoefficients")
+                
+                # Handling Swarm Parameters (List of Dicts -> Flat Dict)
+                # LoKI-B inconsistency: checks for both camelCase and snake_case
+                raw_swarm = entry_data.get("swarmParameters")
+                if raw_swarm is None:
+                    raw_swarm = entry_data.get("swarm_parameters", [])
+                
+                swarm_params = {}
+                if isinstance(raw_swarm, list):
+                    for item in raw_swarm:
+                        for k, v in item.items():
+                             if isinstance(v, dict) and "value" in v:
+                                 swarm_params[k] = v["value"]
+                             else:
+                                 swarm_params[k] = v
+                elif isinstance(raw_swarm, dict):
+                    swarm_params = raw_swarm
+                
+                # Fallback: If rates missing in JSON, check text file
+                # LoKI-B key is e.g. "reducedField_10.5".
+                # Folder usually matches this key.
+                if not rates:
+                    # Try both nesting levels observed
+                    paths_to_try = [
+                        os.path.join(output_dir, "output", key, "rateCoefficients.txt"),
+                        os.path.join(output_dir, "output", "output", key, "rateCoefficients.txt")
+                    ]
+                    
+                    for txt_path in paths_to_try:
+                        if os.path.exists(txt_path):
+                            if not rates: rates = {} # Initialize if None
+                            try:
+                                with open(txt_path, "r") as f:
+                                    lines = f.readlines()
+                                for line in lines[1:]:
+                                    line = line.strip()
+                                    if not line or line.startswith('---') or line.startswith('*'): continue
+                                    parts = line.split(None, 2)
+                                    if len(parts) >= 3:
+                                        try:
+                                            val = float(parts[0])
+                                            d = parts[2].strip()
+                                            rates[d] = val
+                                        except ValueError: pass
+                                # If successful, break
+                                if rates: break
+                            except Exception as e:
+                                print(f"Warning: Error parsing {txt_path}: {e}")
+
+                table_entries.append({
+                    "reduced_field_Td": reduced_field,
+                    "rate_coefficients": rates or {},
+                    "swarm_parameters": swarm_params
+                })
+            
+            # Sort by reduced field
+            table_entries.sort(key=lambda x: x["reduced_field_Td"])
+            
+            return {
+                "type": "lookup_table",
+                "param": "reduced_field_Td",
+                "entries": table_entries
+            }
+            
+        else:
+            # Single Point Mode (Legacy)
+            # Structure is direct: {"energyGrid": ..., "eedf": ...}
+            energy = data.get("energyGrid") or data.get("energy") or []
+            eedf = data.get("eedf") or data.get("f") or []
+            rate_coeffs = data.get("rateCoefficients") or {}
+            swarm_params = data.get("swarmParameters") or {}
+            
+            return {
+                "type": "single",
+                "energy_grid": energy, 
+                "eedf": eedf, 
+                "rate_coefficients": rate_coeffs,
+                "swarm_parameters": swarm_params
+            }
+            
+    except Exception as e:
+        print(f"DEBUG: JSON parse error: {e}")
+        return {}
 
 
 class LoKIBackend:
@@ -387,9 +490,18 @@ class LoKIBackend:
         eedf_dir = os.path.join(base_output_dir, "eedf")
         os.makedirs(eedf_dir, exist_ok=True)
         
+        # Prevent LoKI-B interactive prompt by clearing output/eedf/output if it exists
+        actual_output_dir = os.path.join(eedf_dir, "output")
+        if os.path.exists(actual_output_dir):
+            import shutil
+            try:
+                shutil.rmtree(actual_output_dir)
+            except OSError as e:
+                print(f"Warning: Could not clear output directory {actual_output_dir}: {e}")
+
         in_path = os.path.join(eedf_dir, "lokib.in")
-        loki_output_dir = os.path.join(eedf_dir, "loki_output")
-        os.makedirs(loki_output_dir, exist_ok=True)
+        # loki_output_dir seemed unused or redundant if LoKI writes to 'output'
+        # But we keep it if needed for other things? No, let's just stick to standard.
         
         print(f"\n=== Running LoKI-B ===")
         print(f"DEBUG: I AM RUNNING FROM {__file__}") 
@@ -436,10 +548,11 @@ class LoKIBackend:
         print(f"\n*** LoKI-B output location: {os.path.abspath(actual_output_dir)}/ ***\n")
         
         # Try to read JSON output first (if writeJSON: true)
-        json_file = os.path.join(actual_output_dir, "output.json")
-        # _parse_loki_json_output handles path checking so we just pass the directory or verify here?
-        # Actually _parse_loki_json_output takes loki_output_dir and looks for output.json inside it or parent
-        result = self._parse_loki_json_output(actual_output_dir)
+        # Note: LoKI-B seems to write output.json in the working directory (eedf_dir),
+        # not inside the output folder, despite 'folder: output' config?
+        # Or maybe it puts it there if JSONFile path is relative?
+        # Anyway, we found it at output/eedf/output.json.
+        result = _parse_loki_json_output(eedf_dir)
         if result:
             return result
         

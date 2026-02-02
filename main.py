@@ -28,6 +28,8 @@ def main(config_path):
     # Extract case name from config path
     case_name = Path(config_path).parent.name
     output_filename = f"{case_name}_results.png"
+    txt_filename = f"{case_name}_results.txt"
+    model.save_results_txt(txt_filename)
     model.plot_results(case_name, output_filename)
 
 

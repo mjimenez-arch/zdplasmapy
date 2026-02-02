@@ -163,12 +163,30 @@ def load_chemistry(chemistry_path):
     import os
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     
+    # Initialize Mass Parser
+    from .species_properties import SpeciesMassParser
+    mass_parser = SpeciesMassParser()
+
     # Parse species
     species_list = []
     mass_dict = {'mass': {}}
     for sp in chem['species']:
-        name = sp['name']
-        mass_amu = sp['mass_amu']
+        # Handle string-only species definition (Compact format)
+        if isinstance(sp, str):
+            name = sp
+            mass_amu = mass_parser.get_mass(name)
+            if mass_amu is None:
+                raise ValueError(f"Could not determine mass for species '{name}' automatically. Please specify it as an object with 'mass_amu'.")
+        else:
+            # Object definition
+            name = sp['name']
+            if 'mass_amu' in sp:
+                mass_amu = sp['mass_amu']
+            else:
+                mass_amu = mass_parser.get_mass(name)
+                if mass_amu is None:
+                    raise ValueError(f"Missing 'mass_amu' for species '{name}' and auto-detection failed.")
+
         species_list.append(name)
         # Mass keys: strip charge symbols for lookup
         clean_name = name.replace('+', '').replace('-', '')
@@ -224,7 +242,7 @@ def load_chemistry(chemistry_path):
                 'reference': eedf_section.get('reference', ''),
                 'use_eedf': True,
                 'cross_section': cs_file,
-                'process_id': process,
+                'process': process,
             })
     
     # Process standard reactions

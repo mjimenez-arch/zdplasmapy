@@ -28,8 +28,9 @@ initial_conditions:
     e: 1.0e14
 
 additional_parameters:
-  reduced_field_Td: 100.0
   eedf:
     enabled: true
     backend: loki
-    timestamps: [0.0, 1.0e-6, 5.0e-6, 1.0e-5, 5.0e-5, 1.0e-4, 5.0e-4, 1.0e-3]
+    timestamps: [0.0]
+    options:
+      reduced_field_td: "40%linspace(10,50,5)"

@@ -1,12 +1,12 @@
 name: testArgon
-description: "Argon plasma with EEDF-based rate coefficients (Plasimo round-robin model)"
+description: "Argon plasma with EEDF-based rate coefficients (ZDPlasKin-like model)"
 
 chemistry:
   file: ./chemistry.yml
 
 parameters:
-  pressure_Pa: 100.0
-  power_W: 314.0
+  pressure_Pa: 10000.0
+  power_W: 0.0 # Using Field-Driven Joule Heating (calculated in code)
   gas_temp_K: 300.0
   time_end_s: 0.01
 
@@ -18,9 +18,10 @@ geometry:
 transport_model: declarations
 
 initial_conditions:
-  Te_eV: 1.0
+  Te_eV: 0.026 # 300 K
+  pressure: 10000.0
   species_densities:
-    Ar: 2.414e22
+    Ar: 2.414e24
     Ar_excited: 0.0
     Ar_plus: 1.0e6
     e: 1.0e6
@@ -32,12 +33,13 @@ additional_parameters:
     backend: loki
     timestamps: [0.0]
     options:
-      reduced_field_td: 100.0
+      # User requested ExponentialE/N scan from 1e-4 Td to 20 Td
+      reduced_field_td: "logspace(-4, 1.301, 50)" 
       physics:
         coulomb_collisions: false
       numerics:
         energy_grid:
-          emax_eV: 30.0
-          points: 299
+          emax_eV: 100.0
+          points: 500
         precision: 1.0e-9
         convergence: 1.0e-4
