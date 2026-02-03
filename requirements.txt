@@ -6,3 +6,4 @@ matplotlib
 streamlit
 pytest
 pyyaml
+jsonschema

@@ -222,4 +222,4 @@ external/LoKI-B-cpp/*
 output/
 *.png
 *_results.png
-stoichiometry_report.txt
+stoichiometry_report.txtoutput/

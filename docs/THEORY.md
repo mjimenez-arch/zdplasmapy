@@ -1,3 +1,7 @@
+> [!NOTE]
+> **Status: Verified**
+> Validated against codebase (Feb 2026).
+
 # Theory and Implementation of the Global Model Engine
 
 This document explains how the Python code in `global_model.py` translates a set of reaction formulas and rate coefficients into a system of Ordinary Differential Equations (ODEs) that can be solved numerically.

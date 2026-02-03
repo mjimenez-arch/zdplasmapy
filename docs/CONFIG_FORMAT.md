@@ -1,3 +1,7 @@
+> [!NOTE]
+> **Status: Verified**
+> Validated against codebase (Feb 2026).
+
 # zdplasmapy Configuration File Format
 
 This document describes the standard format for `config.yml` files in zdplasmapy case folders.

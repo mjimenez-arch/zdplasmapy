@@ -1,3 +1,7 @@
+> [!WARNING]
+> **Status: Legacy / Under Revision**
+> This roadmap reflects the project state as of late 2025.
+
 # zdplasmapy Project Roadmap
 
 This document outlines the strategic vision and planned development phases for the `zdplasmapy` suite. The goal is to evolve this project from a 0D solver into a comprehensive, interactive framework for state-to-state plasma chemistry research and exploration, with a core focus on scientific reproducibility and validation.

@@ -1,3 +1,7 @@
+> [!WARNING]
+> **Status: Under Revision**
+> This document may contain outdated references (e.g. `app_new.py` is now `app.py`).
+
 # Minimal Refactor Summary
 
 ## Changes Implemented

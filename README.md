@@ -1,109 +1,82 @@
-# DISCLAIMER: this project is a prototype playground that is fully developed with AI tools. 
-My goal is to see how far and fast different prototypes of global model tools can be developed. I focus on workflow design with AI agents, regresion tests in github, rapid design of simulation tools, input and output format, and validation of chemistry cases, among others. Thus, certain files might be contradictory. For example, this readme might not work and should be considered a work in progress. I advice to use AI agents always with this repository. 
-
 # Zero Dimensional Plasma Python (ZDPlasmaPy)
 
 [![Python CI](https://github.com/mjimenez-arch/zdplasmapy/actions/workflows/python-ci.yml/badge.svg)](https://github.com/mjimenez-arch/zdplasmapy/actions/workflows/python-ci.yml)
 
-A flexible 0D global model for simulating low-temperature plasma chemistry, refactored from a legacy MATLAB code for improved robustness, flexibility, and testability.
+**ZDPlasmaPy** is a flexible 0D global model for simulating low-temperature plasma chemistry. It is a refactored and modernized Python engine that solves coupled ordinary differential equations (ODEs) for particle and power balance.
 
-This repository contains a Python-based engine for 0D (global) modeling of low-temperature plasmas. The engine solves a system of coupled ordinary differential equations for particle and power balance to determine the evolution of species densities and the electron temperature. The project demonstrates a complete refactoring of an older scientific code into a modern, modular, and maintainable software architecture.
-<!--
-![Example Oxygen Model Results](path/to/your/successful_oxygen_plot.png)
-*(To add an image: take a screenshot of your successful Oxygen plot, save it in this folder, and replace the 
---->
 ## Features
 
-- **Flexible Engine:** The core `global_model.py` is a generic ODE solver engine, completely separate from the plasma physics.
-- **Python-based Input:** Plasma chemistries are defined in separate, easy-to-read Python "recipe" files, allowing for syntax highlighting, version control, and unlimited complexity.
-- **Robust Solver:** Utilizes the stiff ODE solver (`BDF`) from the SciPy library for numerical stability.
-- **Self-Consistent Initialization:** Automatically calculates initial background gas density to be consistent with the specified pressure via the ideal gas law.
-- **Built-in Diagnostics:** Includes an integrated stoichiometry debugger that generates a `stoichiometry_report.txt` file when in debug mode, allowing for easy verification of the reaction set.
-- **Academic Accuracy:** The Oxygen model is a faithful implementation of the physics described in the paper by **Chung et al., J. Appl. Phys. 86, 3536 (1999)**.
+-   **Flexible Engine:** Core global model is decoupled from chemistry definitions.
+-   **Python-based Input:** Define complex chemistries in readable YAML and Python files.
+-   **Robust Solver:** Uses `SciPy`'s stiff ODE solvers (BDF) for stability.
+-   **EEDF Integration:** Couples with **LoKI-B** (Boltzmann solver) for non-Maxwellian electron energy distribution functions.
+-   **Validation Ready:** Includes automated stoichiometry checks and reproduction of academic benchmarks (e.g., Chung 1999).
 
-## Theoretical Background
+## Project Structure
 
-For a detailed explanation of the underlying physics and the mathematical formulation of the ODE system, please see the [**THEORY.md**](THEORY.md) document.
+```
+zdplasmapy/
+├── cases/              # Simulation cases (e.g., testArgon, testEEDF)
+├── docs/               # Detailed documentation (Theory, EEDF, Dev Guide)
+├── external/           # External dependencies (LoKI-B-cpp)
+├── output/             # Simulation results and logs
+├── scripts/            # Setup and utility scripts
+├── src/                # Core source code
+├── tests/              # Unit and integration tests
+├── app.py              # Streamlit web interface
+└── main.py             # Main entry point CLI
+```
 
----
-
-## Getting Started
+## Quick Start (Linux/WSL)
 
 ### 1. Prerequisites
-- Anaconda or Miniconda installed.
-- `git` installed on your system.
+You need **Python 3**, **Git**, and **CMake** (for building the Boltzmann solver).
 
-### 2. Setup
-
-First, clone the repository and set up the Conda environment.
+### 2. Installation
+We provide a helper script to setup the environment (install system dependencies, create venv, and build LoKI-B):
 
 ```bash
-# Clone the repository
-git clone https://github.com/mjimenez-arch/zdplasmapy.git
-cd zdplasmapy
-
-# Create a new Conda environment with all required packages
-conda create -n venv python=3.9 numpy scipy matplotlib
-
-# Activate the environment
-conda activate venv
+# Full setup (requires sudo for apt packages)
+bash scripts/setup_wsl.sh
 ```
 
-### 3. How to Run a Simulation
+**Alternative (Manual Setup):**
+If you prefer to manage your own environment:
+1.  **System Config**: Install `cmake`, `g++`, `libeigen3-dev`, `nlohmann-json3-dev`.
+2.  **Python Env**:
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    ```
+3.  **Build Solver**:
+    ```bash
+    bash external/setup_loki_b.sh
+    ```
 
-The simulation is controlled and executed from the `main.py` script.
+### 3. Usage
 
-**A. Configure the Simulation:**
-Open `main.py` in an editor.
-- **Choose the model:** Uncomment the desired `input_filename` to switch between Oxygen and Argon.
-- **Toggle debug mode:** Set `debug=True` to generate detailed console output and the `stoichiometry_report.txt` file. Set to `False` for a clean run.
-
-```python
-# In main.py:
-input_filename = 'input_models/final_model_input.py' # Oxygen Model
-# input_filename = 'input_models/argon_model_input.py'   # Argon Model
-
-model = GlobalModel(model_definition, debug=True)
-```
-
-**B. Run the Code:**
-Execute the script from your terminal (make sure your `plasma_env` is active):
+Activate your environment and run a simulation case:
 
 ```bash
-python main.py
+source .venv/bin/activate
+python main.py cases/testArgon/config.yml
 ```
 
-The script will run the simulation and display plots of the species densities and electron temperature over time.
+### 4. Running the Web App
 
----
+To explore results interactively:
 
-### 4. How to Run a app.py within codespace environment
-
-**Create a new Conda environment with all required packages**
-```bash
-conda create -n venv python=3.9 numpy scipy matplotlib
-```
-
-**Activate the environment**
-```bash
-conda activate venv
-```
-
-**renstall libraries if required**
-```bash
-pip install -r requirements.txt
-```
-**run the web app**
 ```bash
 streamlit run app.py
 ```
 
-## Project Structure
+## Documentation
 
-- **`main.py`**: The main executable script to run a simulation.
-- **`global_model.py`**: The core, generic plasma model engine.
-- **`model_parser.py`**: Utility to load the Python-based input files.
-- **`input_models/`**: Folder containing the chemistry "recipe" files.
-  - `final_model_input.py`: Oxygen plasma model (Chung 1999).
-  - `argon_model_input.py`: A basic Argon plasma model.
-- **`THEORY.md`**: A detailed document explaining the underlying physics and equations.
+-   [**Theory Guide**](docs/THEORY.md): Detailed physics and mathematical formulation.
+-   [**EEDF Integration**](docs/EEDF_INTEGRATION.md): How the Boltzmann solver coupling is implemented.
+-   [**Developer Guide**](docs/DEVELOPER_GUIDE.md): Tips for contributing and adding new cases.
+-   [**Roadmap**](docs/ROADMAP.md): Future development plans.
+
+---
+*Disclaimer: This project is a research prototype developed with AI assistance focusing on workflow design and rapid prototyping.*

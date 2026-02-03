@@ -41,41 +41,16 @@ else
     echo "Warning: requirements.txt not found, skipping pip install"
 fi
 
-# 6. Build LoKI-B if repo exists
-if [ -d "external/loki-b/LoKI-B-cpp" ]; then
+# 6. Build LoKI-B using the external setup script
+if [ -f "external/setup_loki_b.sh" ]; then
     echo ""
-    echo "=== Building LoKI-B ==="
-    cd external/loki-b/LoKI-B-cpp
-    
-    # Clean old build
-    if [ -d "build" ]; then
-        echo "Removing old build directory..."
-        rm -rf build
-    fi
-    
-    echo "Configuring CMake..."
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-    
-    echo "Building (this may take a few minutes)..."
-    cmake --build build -j$(nproc)
-    
-    # Verify executable
-    if [ -f "build/app/loki" ]; then
-        echo "✓ LoKI-B built successfully: build/app/loki"
-        ./build/app/loki --help > /dev/null 2>&1 && echo "✓ Executable verified" || echo "⚠ Executable exists but --help failed"
-    else
-        echo "✗ LoKI-B executable not found. Check build output for errors."
-    fi
-    
-    cd ../../..
+    echo "=== Running LoKI-B Setup ==="
+    # Make executable just in case
+    chmod +x external/setup_loki_b.sh
+    # Execute the script
+    ./external/setup_loki_b.sh
 else
-    echo ""
-    echo "LoKI-B-cpp not found. To build it later:"
-    echo "  cd external/loki-b"
-    echo "  git clone https://github.com/LoKI-Suite/LoKI-B-cpp.git"
-    echo "  cd LoKI-B-cpp"
-    echo "  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release"
-    echo "  cmake --build build -j"
+    echo "Warning: external/setup_loki_b.sh not found. Skipping LoKI-B build."
 fi
 
 # 7. Configure git if needed

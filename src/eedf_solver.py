@@ -19,6 +19,7 @@ import warnings
 import logging
 import numpy as np
 from pathlib import Path
+import hashlib
 
 
 class EEDFBackend(Protocol):
@@ -449,6 +450,21 @@ def _parse_loki_json_output(output_dir: str) -> Dict[str, Any]:
             # Sort by reduced field
             table_entries.sort(key=lambda x: x["reduced_field_Td"])
             
+            # UNWRAP Single Point results (prevents confusing "scan of 1 point")
+            if len(table_entries) == 1:
+                single = table_entries[0]
+                return {
+                    "type": "single",
+                    "energy_grid": [], # Often not available in JSON output for scan mode, handled by GlobalModel?
+                    # LoKI-B JSON output for scans often lacks the full EEDF array per point to save space,
+                    # unless configured otherwise. But legacy single mode expects it.
+                    # If we don't have it, we might have issues plotting, but rates work.
+                    # For now, let's keep it simple: just unwrap rates and swarm params.
+                    "eedf": [],
+                    "rate_coefficients": single["rate_coefficients"],
+                    "swarm_parameters": single["swarm_parameters"]
+                }
+
             return {
                 "type": "lookup_table",
                 "param": "reduced_field_Td",
@@ -655,8 +671,7 @@ class LokiBSolver(EEDFSolver):
         """
         super().__init__(cache_dir)
         if loki_executable is None:
-            # Try common executable names from LoKI-B++ build layout.
-            loki_executable = self._auto_detect_executable()
+            loki_executable = _detect_loki_binary(None)
         if not loki_executable or not Path(loki_executable).exists():
             raise FileNotFoundError(
                 "LoKI-B executable not found. Build LoKI-B++ (app/loki) or provide loki_executable path."

@@ -19,7 +19,6 @@ transport_model: declarations
 
 initial_conditions:
   Te_eV: 0.026 # 300 K
-  pressure: 10000.0
   species_densities:
     Ar: 2.414e24
     Ar_excited: 0.0

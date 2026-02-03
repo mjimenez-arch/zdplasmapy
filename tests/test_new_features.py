@@ -104,10 +104,29 @@ class TestNewFeatures(unittest.TestCase):
         
         # Create config
         config = {
+            'name': 'Test Modular Config',
             'chemistry': {
                 'files': ['chem1.yml', 'chem2.yml']
             },
-            'parameters': {'pressure_Pa': 100},
+            'parameters': {
+                'pressure_Pa': 100.0,
+                'power_W': 500.0,
+                'gas_temp_K': 300.0,
+                'time_end_s': 1.0e-3
+            },
+            'geometry': {
+                'type': 'cylindrical',
+                'radius_m': 0.1,
+                'length_m': 0.2
+            },
+            'initial_conditions': {
+                'Te_eV': 1.0,
+                'species_densities': {
+                    'N2': 1e20,
+                    'O2': 1e19,
+                    'e': 1e15
+                }
+            },
             'transport_model': 'declarations'
         }
         config_path = os.path.join(self.test_dir, "config.yml")

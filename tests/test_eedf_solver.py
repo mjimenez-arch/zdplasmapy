@@ -18,7 +18,7 @@ import numpy as np
 
 from src.eedf_solver import LokiBSolver
 
-FAKE_SOLVER_CODE = r"""
+FAKE_SOLVER_CODE = r"""#!/usr/bin/env python3
 import sys, json, math
 if len(sys.argv) < 4 or sys.argv[2] != '-o':
     print('Usage: loki-b <input.json> -o <output.json>', file=sys.stderr)
@@ -37,13 +37,14 @@ REACTION_ID = "e + O2 -> O2+ + 2 e"
 CROSS_SECTION_FILE = "O2_LXCat.txt"
 TE_RANGE = [0.5, 1.0, 2.0, 3.0, 5.0]
 
-@unittest.skip("Skipping until LoKI-B build succeeds")
+# @unittest.skip("Skipping until LoKI-B build succeeds")
 class TestLokiBSolver(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.tmpdir = Path(self.tmp.name)
         self.fake_exe = self.tmpdir / "loki-b.py"
         self.fake_exe.write_text(FAKE_SOLVER_CODE, encoding="utf-8")
+        self.fake_exe.chmod(0o755)
         self.cache_dir = self.tmpdir / "cache"
         self.solver = LokiBSolver(loki_executable=str(self.fake_exe), cache_dir=self.cache_dir)
 
